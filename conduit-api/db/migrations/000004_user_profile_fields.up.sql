@@ -1,0 +1,3 @@
+ALTER TABLE users
+ADD COLUMN display_name TEXT NOT NULL DEFAULT '',
+ADD COLUMN pfp_url TEXT;

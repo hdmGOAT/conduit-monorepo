@@ -9,6 +9,9 @@ CREATE TYPE form_field_type AS ENUM ('text', 'textarea', 'number', 'date', 'sele
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL DEFAULT '',
+    pfp_url TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -111,6 +114,15 @@ CREATE TABLE collection_form_answers (
     UNIQUE (submission_id, field_id)
 );
 
+CREATE TABLE refresh_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_id TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX idx_groups_owner_id ON groups(owner_id);
 CREATE INDEX idx_memberships_group_id ON memberships(group_id);
 CREATE INDEX idx_collections_group_id ON collections(group_id);
@@ -123,3 +135,5 @@ CREATE INDEX idx_collection_form_submissions_form_id ON collection_form_submissi
 CREATE INDEX idx_collection_form_submissions_collection_id ON collection_form_submissions(collection_id);
 CREATE INDEX idx_collection_form_submissions_user_id ON collection_form_submissions(user_id);
 CREATE INDEX idx_collection_form_answers_submission_id ON collection_form_answers(submission_id);
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);

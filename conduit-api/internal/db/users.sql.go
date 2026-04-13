@@ -12,18 +12,25 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email)
 VALUES ($1)
-RETURNING id, email, created_at
+RETURNING id, email, password_hash, display_name, pfp_url, created_at
 `
 
 func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, createUser, email)
 	var i User
-	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.PfpUrl,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, created_at
+SELECT id, email, password_hash, display_name, pfp_url, created_at
 FROM users
 WHERE email = $1
 `
@@ -31,12 +38,19 @@ WHERE email = $1
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByEmail, email)
 	var i User
-	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.PfpUrl,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, created_at
+SELECT id, email, password_hash, display_name, pfp_url, created_at
 FROM users
 WHERE id = $1
 `
@@ -44,12 +58,19 @@ WHERE id = $1
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
 	var i User
-	err := row.Scan(&i.ID, &i.Email, &i.CreatedAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.DisplayName,
+		&i.PfpUrl,
+		&i.CreatedAt,
+	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, created_at
+SELECT id, email, password_hash, display_name, pfp_url, created_at
 FROM users
 ORDER BY id
 LIMIT $1 OFFSET $2
@@ -69,7 +90,14 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 	var items []User
 	for rows.Next() {
 		var i User
-		if err := rows.Scan(&i.ID, &i.Email, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.PasswordHash,
+			&i.DisplayName,
+			&i.PfpUrl,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

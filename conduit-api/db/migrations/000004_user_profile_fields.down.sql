@@ -1,0 +1,3 @@
+ALTER TABLE users
+DROP COLUMN IF EXISTS pfp_url,
+DROP COLUMN IF EXISTS display_name;

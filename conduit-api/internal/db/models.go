@@ -407,8 +407,20 @@ type Payment struct {
 	CreatedAt             pgtype.Timestamptz `json:"created_at"`
 }
 
-type User struct {
+type RefreshToken struct {
 	ID        int64              `json:"id"`
-	Email     string             `json:"email"`
+	UserID    int64              `json:"user_id"`
+	TokenID   string             `json:"token_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type User struct {
+	ID           int64              `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	DisplayName  string             `json:"display_name"`
+	PfpUrl       pgtype.Text        `json:"pfp_url"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }

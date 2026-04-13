@@ -18,10 +18,14 @@ type Querier interface {
 	CreateFormSubmission(ctx context.Context, arg CreateFormSubmissionParams) (CollectionFormSubmission, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
+	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, email string) (User, error)
+	CreateUserCredential(ctx context.Context, arg CreateUserCredentialParams) (User, error)
 	GetCollectionFormByCollectionID(ctx context.Context, collectionID int64) (CollectionForm, error)
+	GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
+	GetUserCredentialByEmail(ctx context.Context, email string) (User, error)
 	ListCollectionFormFields(ctx context.Context, formID int64) ([]CollectionFormField, error)
 	ListCollectionsByGroup(ctx context.Context, groupID int64) ([]Collection, error)
 	ListFormAnswersBySubmission(ctx context.Context, submissionID int64) ([]CollectionFormAnswer, error)
@@ -31,6 +35,8 @@ type Querier interface {
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	MarkPaymentFailed(ctx context.Context, id int64) (Payment, error)
 	MarkPaymentPaid(ctx context.Context, id int64) (Payment, error)
+	RevokeRefreshToken(ctx context.Context, tokenID string) error
+	RevokeRefreshTokensForUser(ctx context.Context, userID int64) error
 }
 
 var _ Querier = (*Queries)(nil)
