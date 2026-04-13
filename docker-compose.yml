@@ -1,0 +1,34 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: conduit-postgres
+    environment:
+      POSTGRES_USER: conduit
+      POSTGRES_PASSWORD: conduit
+      POSTGRES_DB: conduit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conduit -d conduit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate:v4.18.3
+    profiles: ["tools"]
+    entrypoint: ["migrate"]
+    volumes:
+      - ./conduit-api/db/migrations:/migrations
+
+  sqlc:
+    image: sqlc/sqlc:1.30.0
+    profiles: ["tools"]
+    working_dir: /src
+    volumes:
+      - ./conduit-api:/src
+
+volumes:
+  postgres_data:

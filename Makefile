@@ -1,6 +1,13 @@
 SHELL := /bin/bash
 
-.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci
+DB_USER ?= conduit
+DB_PASSWORD ?= conduit
+DB_NAME ?= conduit
+DB_PORT ?= 5432
+DB_URL_LOCAL := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
+DB_URL_DOCKER := postgres://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)?sslmode=disable
+
+.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate
 
 dev:
 	@set -euo pipefail; \
@@ -35,3 +42,25 @@ build-api:
 	cd conduit-api && go build ./...
 
 ci: lint test build-api
+
+db-up:
+	docker compose up -d postgres
+
+db-down:
+	docker compose down
+
+db-logs:
+	docker compose logs -f postgres
+
+db-reset:
+	docker compose down -v
+	docker compose up -d postgres
+
+migrate-up:
+	docker compose run --rm migrate -path=/migrations -database "$(DB_URL_DOCKER)" up
+
+migrate-down:
+	docker compose run --rm migrate -path=/migrations -database "$(DB_URL_DOCKER)" down 1
+
+sqlc-generate:
+	docker compose run --rm sqlc generate

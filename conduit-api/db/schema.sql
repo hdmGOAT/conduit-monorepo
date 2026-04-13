@@ -1,0 +1,74 @@
+CREATE TYPE membership_role AS ENUM ('admin', 'member', 'collector');
+CREATE TYPE collection_status AS ENUM ('active', 'closed');
+CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed');
+CREATE TYPE payment_method AS ENUM ('stripe', 'cash');
+CREATE TYPE cash_payment_status AS ENUM ('pending', 'confirmed');
+CREATE TYPE outbox_status AS ENUM ('pending', 'processed');
+
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE groups (
+    id BIGSERIAL PRIMARY KEY,
+    owner_id BIGINT NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE memberships (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    role membership_role NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, group_id)
+);
+
+CREATE TABLE collections (
+    id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    amount BIGINT NOT NULL,
+    deadline TIMESTAMPTZ NOT NULL,
+    status collection_status NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE payments (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id),
+    collection_id BIGINT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    amount BIGINT NOT NULL,
+    status payment_status NOT NULL DEFAULT 'pending',
+    method payment_method NOT NULL,
+    stripe_payment_intent_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE cash_payments (
+    id BIGSERIAL PRIMARY KEY,
+    payment_id BIGINT NOT NULL UNIQUE REFERENCES payments(id) ON DELETE CASCADE,
+    status cash_payment_status NOT NULL DEFAULT 'pending',
+    confirmed_by BIGINT REFERENCES users(id),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    confirmed_at TIMESTAMPTZ
+);
+
+CREATE TABLE outbox_events (
+    id BIGSERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    aggregate_id BIGINT NOT NULL,
+    payload JSONB NOT NULL,
+    status outbox_status NOT NULL DEFAULT 'pending',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_groups_owner_id ON groups(owner_id);
+CREATE INDEX idx_memberships_group_id ON memberships(group_id);
+CREATE INDEX idx_collections_group_id ON collections(group_id);
+CREATE INDEX idx_payments_user_id ON payments(user_id);
+CREATE INDEX idx_payments_collection_id ON payments(collection_id);
+CREATE INDEX idx_outbox_status_created_at ON outbox_events(status, created_at);
