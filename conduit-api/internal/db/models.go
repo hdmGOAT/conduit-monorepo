@@ -95,6 +95,54 @@ func (ns NullCollectionStatus) Value() (driver.Value, error) {
 	return string(ns.CollectionStatus), nil
 }
 
+type FormFieldType string
+
+const (
+	FormFieldTypeText     FormFieldType = "text"
+	FormFieldTypeTextarea FormFieldType = "textarea"
+	FormFieldTypeNumber   FormFieldType = "number"
+	FormFieldTypeDate     FormFieldType = "date"
+	FormFieldTypeSelect   FormFieldType = "select"
+	FormFieldTypeCheckbox FormFieldType = "checkbox"
+	FormFieldTypeEmail    FormFieldType = "email"
+	FormFieldTypePhone    FormFieldType = "phone"
+)
+
+func (e *FormFieldType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = FormFieldType(s)
+	case string:
+		*e = FormFieldType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for FormFieldType: %T", src)
+	}
+	return nil
+}
+
+type NullFormFieldType struct {
+	FormFieldType FormFieldType `json:"form_field_type"`
+	Valid         bool          `json:"valid"` // Valid is true if FormFieldType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullFormFieldType) Scan(value interface{}) error {
+	if value == nil {
+		ns.FormFieldType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.FormFieldType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullFormFieldType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.FormFieldType), nil
+}
+
 type MembershipRole string
 
 const (
@@ -281,6 +329,46 @@ type Collection struct {
 	Deadline  pgtype.Timestamptz `json:"deadline"`
 	Status    CollectionStatus   `json:"status"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type CollectionForm struct {
+	ID           int64              `json:"id"`
+	CollectionID int64              `json:"collection_id"`
+	Title        string             `json:"title"`
+	Description  pgtype.Text        `json:"description"`
+	IsRequired   bool               `json:"is_required"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
+type CollectionFormAnswer struct {
+	ID           int64              `json:"id"`
+	SubmissionID int64              `json:"submission_id"`
+	FieldID      int64              `json:"field_id"`
+	ValueText    pgtype.Text        `json:"value_text"`
+	ValueJson    []byte             `json:"value_json"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type CollectionFormField struct {
+	ID          int64              `json:"id"`
+	FormID      int64              `json:"form_id"`
+	FieldKey    string             `json:"field_key"`
+	Label       string             `json:"label"`
+	FieldType   FormFieldType      `json:"field_type"`
+	Placeholder pgtype.Text        `json:"placeholder"`
+	IsRequired  bool               `json:"is_required"`
+	Options     []byte             `json:"options"`
+	SortOrder   int32              `json:"sort_order"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type CollectionFormSubmission struct {
+	ID           int64              `json:"id"`
+	FormID       int64              `json:"form_id"`
+	CollectionID int64              `json:"collection_id"`
+	UserID       int64              `json:"user_id"`
+	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
 }
 
 type Group struct {
