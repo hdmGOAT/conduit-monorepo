@@ -7,7 +7,7 @@ DB_PORT ?= 5432
 DB_URL_LOCAL := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
 DB_URL_DOCKER := postgres://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)?sslmode=disable
 
-.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate
+.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate docs-api
 
 dev:
 	@set -euo pipefail; \
@@ -64,3 +64,6 @@ migrate-down:
 
 sqlc-generate:
 	docker compose run --rm sqlc generate
+
+docs-api:
+	cd conduit-api && go run ./cmd/apidocs

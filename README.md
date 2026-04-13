@@ -71,6 +71,14 @@ Generate Go DB models/queries from SQL (sqlc):
 make sqlc-generate
 ```
 
+Generate API route docs for frontend integration:
+
+```bash
+make docs-api
+```
+
+Output file: `conduit-api/docs/api-routes.md`
+
 Docker migration target uses this database URL:
 
 ```text
