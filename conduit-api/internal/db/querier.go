@@ -12,11 +12,13 @@ type Querier interface {
 	AddFormAnswer(ctx context.Context, arg AddFormAnswerParams) (CollectionFormAnswer, error)
 	AddMembership(ctx context.Context, arg AddMembershipParams) (Membership, error)
 	CloseCollection(ctx context.Context, id int64) (Collection, error)
+	ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error)
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (Collection, error)
 	CreateCollectionForm(ctx context.Context, arg CreateCollectionFormParams) (CollectionForm, error)
 	CreateCollectionFormField(ctx context.Context, arg CreateCollectionFormFieldParams) (CollectionFormField, error)
 	CreateFormSubmission(ctx context.Context, arg CreateFormSubmissionParams) (CollectionFormSubmission, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error)
+	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, email string) (User, error)
@@ -33,10 +35,12 @@ type Querier interface {
 	ListGroupsByOwner(ctx context.Context, ownerID int64) ([]Group, error)
 	ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]Payment, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
+	MarkPasswordResetTokensUsedForUser(ctx context.Context, userID int64) error
 	MarkPaymentFailed(ctx context.Context, id int64) (Payment, error)
 	MarkPaymentPaid(ctx context.Context, id int64) (Payment, error)
 	RevokeRefreshToken(ctx context.Context, tokenID string) error
 	RevokeRefreshTokensForUser(ctx context.Context, userID int64) error
+	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 }
 
 var _ Querier = (*Queries)(nil)

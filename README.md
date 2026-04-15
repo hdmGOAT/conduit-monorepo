@@ -6,6 +6,24 @@ Monorepo containing:
 
 ## Run in development
 
+Environment variables are loaded from `.env` for local development.
+
+Add these values:
+
+```text
+PORT=8080
+DATABASE_URL=postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable
+JWT_SECRET=dev-change-me
+ACCESS_TOKEN_TTL_MINUTES=15
+REFRESH_TOKEN_TTL_HOURS=168
+PASSWORD_RESET_TTL_MINUTES=30
+COOKIE_SECURE=false
+FRONTEND_URL=http://localhost:3000
+RESEND_FROM_EMAIL=Conduit <onboarding@resend.dev>
+RESEND_API_KEY=<your_resend_api_key>
+API_BASE_URL=http://localhost:8080
+```
+
 Run both apps together:
 
 ```bash

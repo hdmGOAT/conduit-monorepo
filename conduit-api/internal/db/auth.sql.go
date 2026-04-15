@@ -11,6 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const consumePasswordResetToken = `-- name: ConsumePasswordResetToken :one
+UPDATE password_reset_tokens
+SET used_at = NOW()
+WHERE token_hash = $1
+	AND used_at IS NULL
+	AND expires_at > NOW()
+RETURNING user_id
+`
+
+func (q *Queries) ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error) {
+	row := q.db.QueryRow(ctx, consumePasswordResetToken, tokenHash)
+	var user_id int64
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
+const createPasswordResetToken = `-- name: CreatePasswordResetToken :one
+INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, token_hash, expires_at, used_at, created_at
+`
+
+type CreatePasswordResetTokenParams struct {
+	UserID    int64              `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error) {
+	row := q.db.QueryRow(ctx, createPasswordResetToken, arg.UserID, arg.TokenHash, arg.ExpiresAt)
+	var i PasswordResetToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createRefreshToken = `-- name: CreateRefreshToken :one
 INSERT INTO refresh_tokens (user_id, token_id, expires_at)
 VALUES ($1, $2, $3)
@@ -109,6 +151,17 @@ func (q *Queries) GetUserCredentialByEmail(ctx context.Context, email string) (U
 	return i, err
 }
 
+const markPasswordResetTokensUsedForUser = `-- name: MarkPasswordResetTokensUsedForUser :exec
+UPDATE password_reset_tokens
+SET used_at = NOW()
+WHERE user_id = $1 AND used_at IS NULL
+`
+
+func (q *Queries) MarkPasswordResetTokensUsedForUser(ctx context.Context, userID int64) error {
+	_, err := q.db.Exec(ctx, markPasswordResetTokensUsedForUser, userID)
+	return err
+}
+
 const revokeRefreshToken = `-- name: RevokeRefreshToken :exec
 UPDATE refresh_tokens
 SET revoked_at = NOW()
@@ -128,5 +181,21 @@ WHERE user_id = $1 AND revoked_at IS NULL
 
 func (q *Queries) RevokeRefreshTokensForUser(ctx context.Context, userID int64) error {
 	_, err := q.db.Exec(ctx, revokeRefreshTokensForUser, userID)
+	return err
+}
+
+const updateUserPasswordHash = `-- name: UpdateUserPasswordHash :exec
+UPDATE users
+SET password_hash = $2
+WHERE id = $1
+`
+
+type UpdateUserPasswordHashParams struct {
+	ID           int64  `json:"id"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error {
+	_, err := q.db.Exec(ctx, updateUserPasswordHash, arg.ID, arg.PasswordHash)
 	return err
 }

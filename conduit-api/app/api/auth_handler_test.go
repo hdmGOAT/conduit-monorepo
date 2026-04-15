@@ -36,6 +36,8 @@ type fakeAuthService struct {
 	loginFn            func(ctx context.Context, email, password string) (auth.Session, error)
 	refreshFn          func(ctx context.Context, refreshToken string) (auth.Session, error)
 	logoutFn           func(ctx context.Context, refreshToken string) error
+	requestResetFn     func(ctx context.Context, email string) error
+	resetPasswordFn    func(ctx context.Context, token, newPassword string) error
 	getUserFn          func(ctx context.Context, userID int64) (db.User, error)
 	parseAccessTokenFn func(accessToken string) (int64, error)
 }
@@ -57,6 +59,20 @@ func (f *fakeAuthService) Logout(ctx context.Context, refreshToken string) error
 		return nil
 	}
 	return f.logoutFn(ctx, refreshToken)
+}
+
+func (f *fakeAuthService) RequestPasswordReset(ctx context.Context, email string) error {
+	if f.requestResetFn == nil {
+		return nil
+	}
+	return f.requestResetFn(ctx, email)
+}
+
+func (f *fakeAuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if f.resetPasswordFn == nil {
+		return nil
+	}
+	return f.resetPasswordFn(ctx, token, newPassword)
 }
 
 func (f *fakeAuthService) GetUser(ctx context.Context, userID int64) (db.User, error) {
@@ -168,6 +184,82 @@ func TestAuthRefreshMissingToken(t *testing.T) {
 	}
 }
 
+func TestAuthForgotPasswordAlwaysReturnsOK(t *testing.T) {
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		requestResetFn: func(ctx context.Context, email string) error {
+			return errors.New("email provider unavailable")
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/forgot-password", map[string]string{
+		"email": "user@example.com",
+	})
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+}
+
+func TestAuthResetPasswordInvalidToken(t *testing.T) {
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		resetPasswordFn: func(ctx context.Context, token, newPassword string) error {
+			return auth.ErrInvalidPasswordResetToken
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/reset-password", map[string]string{
+		"token":        "expired-token",
+		"new_password": "newpassword123",
+	})
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
+
+func TestAuthResetPasswordSuccess(t *testing.T) {
+	called := false
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		resetPasswordFn: func(ctx context.Context, token, newPassword string) error {
+			called = true
+			if token != "valid-token" {
+				return errors.New("unexpected token")
+			}
+			if newPassword != "newpassword123" {
+				return errors.New("unexpected password")
+			}
+			return nil
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/reset-password", map[string]string{
+		"token":        "valid-token",
+		"new_password": "newpassword123",
+	})
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if !called {
+		t.Fatal("expected reset password service to be called")
+	}
+}
+
 func TestAuthRefreshSuccess(t *testing.T) {
 	router := newTestRouter(&fakeAuthService{
 		registerFn: failRegister,
@@ -276,6 +368,8 @@ func defaultFakeService() *fakeAuthService {
 		registerFn:         failRegister,
 		loginFn:            failLogin,
 		refreshFn:          failRefresh,
+		requestResetFn:     failRequestPasswordReset,
+		resetPasswordFn:    failResetPassword,
 		getUserFn:          failGetUser,
 		parseAccessTokenFn: failParseToken,
 	}
@@ -291,6 +385,14 @@ func failLogin(ctx context.Context, email, password string) (auth.Session, error
 
 func failRefresh(ctx context.Context, refreshToken string) (auth.Session, error) {
 	return auth.Session{}, errors.New("unexpected refresh call")
+}
+
+func failRequestPasswordReset(ctx context.Context, email string) error {
+	return errors.New("unexpected request password reset call")
+}
+
+func failResetPassword(ctx context.Context, token, newPassword string) error {
+	return errors.New("unexpected reset password call")
 }
 
 func failGetUser(ctx context.Context, userID int64) (db.User, error) {

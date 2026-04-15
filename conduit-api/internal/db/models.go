@@ -396,6 +396,15 @@ type OutboxEvent struct {
 	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
 }
 
+type PasswordResetToken struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Payment struct {
 	ID                    int64              `json:"id"`
 	UserID                int64              `json:"user_id"`
