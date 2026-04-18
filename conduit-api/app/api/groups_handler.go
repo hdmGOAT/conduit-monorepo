@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -8,6 +10,7 @@ import (
 	"conduit-monorepo/conduit-api/internal/db"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 )
 
 type GroupsHandler struct {
@@ -203,6 +206,10 @@ func (h *GroupsHandler) ToggleIsOpen(c *gin.Context) {
 
 	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
 		return
 	}
@@ -252,6 +259,10 @@ func (h *GroupsHandler) UpdateGroup(c *gin.Context) {
 
 	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
 		return
 	}
@@ -297,6 +308,10 @@ func (h *GroupsHandler) DeleteGroup(c *gin.Context) {
 
 	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
 		return
 	}
@@ -338,6 +353,10 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 
 	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
 		return
 	}
@@ -355,6 +374,19 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 		}
 	}
 
+	// check for existing join request to make endpoint idempotent
+	existingJRs, err := h.db.ListJoinRequestsByGroup(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check join requests"})
+		return
+	}
+	for _, jr := range existingJRs {
+		if jr.UserID == userID {
+			c.JSON(http.StatusOK, gin.H{"user_id": jr.UserID, "group_id": jr.GroupID, "status": jr.Status, "message": "join request already exists"})
+			return
+		}
+	}
+
 	if grp.IsOpen {
 		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: userID, GroupID: groupID, Column3: db.MembershipRoleMember})
 		if err != nil {
@@ -368,6 +400,11 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 	// create join request
 	jr, err := h.db.CreateJoinRequest(c.Request.Context(), db.CreateJoinRequestParams{UserID: userID, GroupID: groupID, Column3: db.JoinRequestStatusPending})
 	if err != nil {
+		// handle potential race where another request was created concurrently
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create join request"})
 		return
 	}
@@ -491,6 +528,10 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 
 	jr, err := h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{UserID: targetUserID, GroupID: groupID, Column3: status})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update join request"})
 		return
 	}
@@ -546,6 +587,10 @@ func (h *GroupsHandler) LeaveGroup(c *gin.Context) {
 
 	m, err := h.db.DeleteMembership(c.Request.Context(), db.DeleteMembershipParams{UserID: userID, GroupID: groupID})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "membership not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to leave group"})
 		return
 	}
@@ -581,6 +626,10 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 
 	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
 		return
 	}
@@ -606,9 +655,21 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 		}
 	}
 
+	// explicit membership existence check for caller
+	if callerRole == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "caller is not a member of the group"})
+		return
+	}
+
 	// only admins or moderators can manage members
 	if callerRole != db.MembershipRoleAdmin && callerRole != db.MembershipRoleModerator {
 		c.JSON(http.StatusForbidden, gin.H{"error": "must be admin or moderator to remove members"})
+		return
+	}
+
+	// explicit membership existence check for target after permission check
+	if targetRole == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "target user is not a member of the group"})
 		return
 	}
 
@@ -620,6 +681,10 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 
 	m, err := h.db.DeleteMembership(c.Request.Context(), db.DeleteMembershipParams{UserID: targetUserID, GroupID: groupID})
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "membership not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to remove member"})
 		return
 	}
