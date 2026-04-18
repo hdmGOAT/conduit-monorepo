@@ -34,23 +34,110 @@ func (q *Queries) AddMembership(ctx context.Context, arg AddMembershipParams) (M
 }
 
 const createGroup = `-- name: CreateGroup :one
-INSERT INTO groups (owner_id, name)
-VALUES ($1, $2)
-RETURNING id, owner_id, name, created_at
+INSERT INTO groups (owner_id, name, is_open)
+VALUES ($1, $2, $3)
+RETURNING id, owner_id, name, is_open, created_at
 `
 
 type CreateGroupParams struct {
 	OwnerID int64  `json:"owner_id"`
 	Name    string `json:"name"`
+	IsOpen  bool   `json:"is_open"`
 }
 
 func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error) {
-	row := q.db.QueryRow(ctx, createGroup, arg.OwnerID, arg.Name)
+	row := q.db.QueryRow(ctx, createGroup, arg.OwnerID, arg.Name, arg.IsOpen)
 	var i Group
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
 		&i.Name,
+		&i.IsOpen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createJoinRequest = `-- name: CreateJoinRequest :one
+INSERT INTO join_requests (user_id, group_id, status)
+VALUES ($1, $2, $3::join_request_status)
+RETURNING user_id, group_id, status, created_at
+`
+
+type CreateJoinRequestParams struct {
+	UserID  int64             `json:"user_id"`
+	GroupID int64             `json:"group_id"`
+	Column3 JoinRequestStatus `json:"column_3"`
+}
+
+func (q *Queries) CreateJoinRequest(ctx context.Context, arg CreateJoinRequestParams) (JoinRequest, error) {
+	row := q.db.QueryRow(ctx, createJoinRequest, arg.UserID, arg.GroupID, arg.Column3)
+	var i JoinRequest
+	err := row.Scan(
+		&i.UserID,
+		&i.GroupID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteGroup = `-- name: DeleteGroup :one
+DELETE FROM groups
+WHERE id = $1
+RETURNING id, owner_id, name, is_open, created_at
+`
+
+func (q *Queries) DeleteGroup(ctx context.Context, id int64) (Group, error) {
+	row := q.db.QueryRow(ctx, deleteGroup, id)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.IsOpen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const deleteMembership = `-- name: DeleteMembership :one
+DELETE FROM memberships
+WHERE user_id = $1 AND group_id = $2
+RETURNING user_id, group_id, role, created_at
+`
+
+type DeleteMembershipParams struct {
+	UserID  int64 `json:"user_id"`
+	GroupID int64 `json:"group_id"`
+}
+
+func (q *Queries) DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, deleteMembership, arg.UserID, arg.GroupID)
+	var i Membership
+	err := row.Scan(
+		&i.UserID,
+		&i.GroupID,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getGroupByID = `-- name: GetGroupByID :one
+SELECT id, owner_id, name, is_open, created_at
+FROM groups
+WHERE id = $1
+`
+
+func (q *Queries) GetGroupByID(ctx context.Context, id int64) (Group, error) {
+	row := q.db.QueryRow(ctx, getGroupByID, id)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.IsOpen,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -89,7 +176,7 @@ func (q *Queries) ListGroupMemberships(ctx context.Context, groupID int64) ([]Me
 }
 
 const listGroupsByOwner = `-- name: ListGroupsByOwner :many
-SELECT id, owner_id, name, created_at
+SELECT id, owner_id, name, is_open, created_at
 FROM groups
 WHERE owner_id = $1
 ORDER BY id DESC
@@ -108,6 +195,7 @@ func (q *Queries) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]Group
 			&i.ID,
 			&i.OwnerID,
 			&i.Name,
+			&i.IsOpen,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -118,4 +206,136 @@ func (q *Queries) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]Group
 		return nil, err
 	}
 	return items, nil
+}
+
+const listJoinRequestsByGroup = `-- name: ListJoinRequestsByGroup :many
+SELECT user_id, group_id, status, created_at
+FROM join_requests
+WHERE group_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListJoinRequestsByGroup(ctx context.Context, groupID int64) ([]JoinRequest, error) {
+	rows, err := q.db.Query(ctx, listJoinRequestsByGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []JoinRequest
+	for rows.Next() {
+		var i JoinRequest
+		if err := rows.Scan(
+			&i.UserID,
+			&i.GroupID,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateGroup = `-- name: UpdateGroup :one
+UPDATE groups
+SET name = $2
+WHERE id = $1
+RETURNING id, owner_id, name, is_open, created_at
+`
+
+type UpdateGroupParams struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) UpdateGroup(ctx context.Context, arg UpdateGroupParams) (Group, error) {
+	row := q.db.QueryRow(ctx, updateGroup, arg.ID, arg.Name)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.IsOpen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateGroupIsOpen = `-- name: UpdateGroupIsOpen :one
+UPDATE groups
+SET is_open = $2
+WHERE id = $1
+RETURNING id, owner_id, name, is_open, created_at
+`
+
+type UpdateGroupIsOpenParams struct {
+	ID     int64 `json:"id"`
+	IsOpen bool  `json:"is_open"`
+}
+
+func (q *Queries) UpdateGroupIsOpen(ctx context.Context, arg UpdateGroupIsOpenParams) (Group, error) {
+	row := q.db.QueryRow(ctx, updateGroupIsOpen, arg.ID, arg.IsOpen)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.IsOpen,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateJoinRequestStatus = `-- name: UpdateJoinRequestStatus :one
+UPDATE join_requests
+SET status = $3::join_request_status
+WHERE user_id = $1 AND group_id = $2
+RETURNING user_id, group_id, status, created_at
+`
+
+type UpdateJoinRequestStatusParams struct {
+	UserID  int64             `json:"user_id"`
+	GroupID int64             `json:"group_id"`
+	Column3 JoinRequestStatus `json:"column_3"`
+}
+
+func (q *Queries) UpdateJoinRequestStatus(ctx context.Context, arg UpdateJoinRequestStatusParams) (JoinRequest, error) {
+	row := q.db.QueryRow(ctx, updateJoinRequestStatus, arg.UserID, arg.GroupID, arg.Column3)
+	var i JoinRequest
+	err := row.Scan(
+		&i.UserID,
+		&i.GroupID,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateMembership = `-- name: UpdateMembership :one
+UPDATE memberships
+SET role = $3::membership_role
+WHERE user_id = $1 AND group_id = $2
+RETURNING user_id, group_id, role, created_at
+`
+
+type UpdateMembershipParams struct {
+	UserID  int64          `json:"user_id"`
+	GroupID int64          `json:"group_id"`
+	Column3 MembershipRole `json:"column_3"`
+}
+
+func (q *Queries) UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (Membership, error) {
+	row := q.db.QueryRow(ctx, updateMembership, arg.UserID, arg.GroupID, arg.Column3)
+	var i Membership
+	err := row.Scan(
+		&i.UserID,
+		&i.GroupID,
+		&i.Role,
+		&i.CreatedAt,
+	)
+	return i, err
 }

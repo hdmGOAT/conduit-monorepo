@@ -1,0 +1,132 @@
+{
+  "info": {
+    "_postman_id": "b6f0a9c2-3e4b-4f2b-9a2d-123456789abc",
+    "name": "Conduit API - Groups",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Postman collection for Groups and Membership endpoints (create group, list owned groups, add membership, list memberships, join requests)."
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "group_id", "value": "10", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create Group",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+          "body": { "mode": "raw", "raw": "{\n  \"name\": \"Team Name\",\n  \"is_open\": false\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups", "host": [ "{{base_url}}" ], "path": [ "api", "groups" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "List Owned Groups",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/owned", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "owned" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Add Membership",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"user_id\": 123,\n  \"role\": \"member\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "memberships" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "List Group Memberships",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "memberships" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Toggle Group is_open",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"is_open\": true\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/is_open", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "is_open" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Leave Group (self)",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/memberships/me", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "memberships", "me" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Eject Member (admin/moderator)",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/memberships/123", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "memberships", "123" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Update Group",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"New Group Name\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Group",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Request Join",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/join", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "join" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "List Join Requests",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/join-requests", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "join-requests" ] }
+      },
+      "response": []
+    },
+    {
+      "name": "Handle Join Request (Approve/Deny)",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"status\": \"approved\",\n  \"role\": \"member\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/join-requests/123", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "join-requests", "123" ] }
+      },
+      "response": []
+    }
+  ]
+}

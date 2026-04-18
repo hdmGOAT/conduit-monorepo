@@ -1,4 +1,4 @@
-CREATE TYPE membership_role AS ENUM ('admin', 'member', 'collector');
+CREATE TYPE membership_role AS ENUM ('admin', 'member', 'collector', 'moderator');
 CREATE TYPE collection_status AS ENUM ('active', 'closed');
 CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed');
 CREATE TYPE payment_method AS ENUM ('stripe', 'cash');
@@ -19,6 +19,7 @@ CREATE TABLE groups (
     id BIGSERIAL PRIMARY KEY,
     owner_id BIGINT NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
+    is_open BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -26,6 +27,16 @@ CREATE TABLE memberships (
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     role membership_role NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, group_id)
+);
+
+CREATE TYPE join_request_status AS ENUM ('pending', 'approved', 'denied');
+
+CREATE TABLE join_requests (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    status join_request_status NOT NULL DEFAULT 'pending',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (user_id, group_id)
 );
