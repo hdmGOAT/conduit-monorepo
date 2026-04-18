@@ -4,6 +4,11 @@
 
 Organization-Based Collections & Payments Platform
 
+Related implementation notes:
+
+* API/enforcement: `context/subscription_api_notes.md`
+* Database/migrations: `context/subscription_db_notes.md`
+
 ---
 
 # 1. Architectural Overview
@@ -82,6 +87,15 @@ Notifications (future)
 
 ---
 
+## 3.6 Subscription-Aware Capacity Control
+
+* Organizations operate on tiered subscriptions
+* Tier defines transaction capacity per billing period
+* Free tier has a lower member cap and a small transaction fee
+* Limits are enforced synchronously in API write paths
+
+---
+
 # 4. System Components
 
 ---
@@ -113,6 +127,7 @@ Notifications (future)
 * Collection management
 * Payment lifecycle management
 * Cash payment verification
+* Subscription tier enforcement (member and transaction limits)
 * Stripe webhook handling
 * Event creation (outbox)
 
@@ -125,6 +140,7 @@ Notifications (future)
 /payments
 /cash
 /webhooks
+/subscriptions
 /events
 ```
 
@@ -145,6 +161,8 @@ Notifications (future)
 * users
 * groups
 * memberships
+* organization_subscriptions
+* subscription_usage
 * collections
 * payments
 * cash_payments
@@ -232,6 +250,17 @@ DB Outbox → Worker Polling → Process Event → External API → Mark Done
 * id
 * owner_id
 * name
+
+---
+
+## Organization Subscription (Organization/Group Level)
+
+* group_id
+* tier (free | paid)
+* transaction_capacity_per_period
+* transaction_count_current_period
+* member_limit
+* transaction_fee_bps
 
 ---
 
@@ -351,6 +380,17 @@ Mark processed
 
 ---
 
+## 6.6 Subscription Policy Enforcement Flow
+
+1. Request arrives (member invite or payment creation)
+2. Backend loads organization subscription
+3. Backend validates member limit and transaction capacity
+4. For free-tier payments, backend applies small transaction fee
+5. Request succeeds or returns a policy limit error
+6. Usage counters update transactionally on successful writes
+
+---
+
 # 7. State Management
 
 ---
@@ -375,6 +415,15 @@ Pending → Paid → Failed
 
 ```
 Pending → Confirmed
+```
+
+---
+
+## Subscription Usage State
+
+```
+WithinLimit → ExhaustedForPeriod
+ExhaustedForPeriod → WithinLimit (period reset)
 ```
 
 ---
@@ -458,6 +507,13 @@ Pending → Confirmed
 
 ---
 
+## Commercial Scaling
+
+* Tier upgrades increase allowed transaction volume per organization
+* Free-tier transaction fees offset low-volume processing costs
+
+---
+
 # 11. Non-Functional Requirements
 
 ## Reliability
@@ -489,9 +545,11 @@ Pending → Confirmed
 * Stripe is the only payment processor
 * PostgreSQL is the only source of truth
 * Workers are optional scaling layer, not core dependency
+* Subscription limits must be enforced before member/payment writes
+* Free tier has limited members and applies a small transaction fee
 
 ---
 
 # 13. Architecture Summary
 
-> The system is a modular monolith built with Go (Gin) and PostgreSQL as its source of truth. Stripe handles all online payments, while cash payments are confirmed through a secure QR-based collector workflow. An outbox-based worker system processes all external side effects such as Google Sheets synchronization. The architecture prioritizes correctness and simplicity while remaining extensible for future scaling.
+> The system is a modular monolith built with Go (Gin) and PostgreSQL as its source of truth. Stripe handles all online payments, while cash payments are confirmed through a secure QR-based collector workflow. An outbox-based worker system processes all external side effects such as Google Sheets synchronization. The architecture enforces tiered organization subscriptions with transaction-capacity limits, plus free-tier member caps and a small transaction fee, while prioritizing correctness and simplicity.
