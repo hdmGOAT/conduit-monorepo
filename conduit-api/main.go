@@ -35,7 +35,8 @@ func main() {
 	resetEmailSender := email.NewResendSender(cfg.ResendAPIKey, cfg.ResendFromEmail)
 	authService := auth.NewService(queries, tokenManager, resetEmailSender, cfg.FrontendURL, cfg.PasswordResetTTL)
 	authHandler := api.NewAuthHandler(authService, cfg.CookieSecure, tokenManager.RefreshTTLSeconds())
-	router := api.NewRouter(authHandler, authService)
+	groupsHandler := api.NewGroupsHandler(queries)
+	router := api.NewRouter(authHandler, groupsHandler, authService)
 
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server failed: %v", err)

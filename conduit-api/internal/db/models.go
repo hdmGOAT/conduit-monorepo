@@ -143,12 +143,56 @@ func (ns NullFormFieldType) Value() (driver.Value, error) {
 	return string(ns.FormFieldType), nil
 }
 
+type JoinRequestStatus string
+
+const (
+	JoinRequestStatusPending  JoinRequestStatus = "pending"
+	JoinRequestStatusApproved JoinRequestStatus = "approved"
+	JoinRequestStatusDenied   JoinRequestStatus = "denied"
+)
+
+func (e *JoinRequestStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JoinRequestStatus(s)
+	case string:
+		*e = JoinRequestStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JoinRequestStatus: %T", src)
+	}
+	return nil
+}
+
+type NullJoinRequestStatus struct {
+	JoinRequestStatus JoinRequestStatus `json:"join_request_status"`
+	Valid             bool              `json:"valid"` // Valid is true if JoinRequestStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJoinRequestStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.JoinRequestStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JoinRequestStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJoinRequestStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JoinRequestStatus), nil
+}
+
 type MembershipRole string
 
 const (
 	MembershipRoleAdmin     MembershipRole = "admin"
 	MembershipRoleMember    MembershipRole = "member"
 	MembershipRoleCollector MembershipRole = "collector"
+	MembershipRoleModerator MembershipRole = "moderator"
 )
 
 func (e *MembershipRole) Scan(src interface{}) error {
@@ -375,6 +419,14 @@ type Group struct {
 	ID        int64              `json:"id"`
 	OwnerID   int64              `json:"owner_id"`
 	Name      string             `json:"name"`
+	IsOpen    bool               `json:"is_open"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type JoinRequest struct {
+	UserID    int64              `json:"user_id"`
+	GroupID   int64              `json:"group_id"`
+	Status    JoinRequestStatus  `json:"status"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 

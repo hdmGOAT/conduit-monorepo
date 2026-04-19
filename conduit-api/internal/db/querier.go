@@ -18,12 +18,16 @@ type Querier interface {
 	CreateCollectionFormField(ctx context.Context, arg CreateCollectionFormFieldParams) (CollectionFormField, error)
 	CreateFormSubmission(ctx context.Context, arg CreateFormSubmissionParams) (CollectionFormSubmission, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error)
+	CreateJoinRequest(ctx context.Context, arg CreateJoinRequestParams) (JoinRequest, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
 	CreateUser(ctx context.Context, email string) (User, error)
 	CreateUserCredential(ctx context.Context, arg CreateUserCredentialParams) (User, error)
+	DeleteGroup(ctx context.Context, id int64) (Group, error)
+	DeleteMembership(ctx context.Context, arg DeleteMembershipParams) (Membership, error)
 	GetCollectionFormByCollectionID(ctx context.Context, collectionID int64) (CollectionForm, error)
+	GetGroupByID(ctx context.Context, id int64) (Group, error)
 	GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
@@ -33,6 +37,7 @@ type Querier interface {
 	ListFormAnswersBySubmission(ctx context.Context, submissionID int64) ([]CollectionFormAnswer, error)
 	ListGroupMemberships(ctx context.Context, groupID int64) ([]Membership, error)
 	ListGroupsByOwner(ctx context.Context, ownerID int64) ([]Group, error)
+	ListJoinRequestsByGroup(ctx context.Context, groupID int64) ([]JoinRequest, error)
 	ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]Payment, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	MarkPasswordResetTokensUsedForUser(ctx context.Context, userID int64) error
@@ -40,6 +45,10 @@ type Querier interface {
 	MarkPaymentPaid(ctx context.Context, id int64) (Payment, error)
 	RevokeRefreshToken(ctx context.Context, tokenID string) error
 	RevokeRefreshTokensForUser(ctx context.Context, userID int64) error
+	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (Group, error)
+	UpdateGroupIsOpen(ctx context.Context, arg UpdateGroupIsOpenParams) (Group, error)
+	UpdateJoinRequestStatus(ctx context.Context, arg UpdateJoinRequestStatusParams) (JoinRequest, error)
+	UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (Membership, error)
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
 }
 

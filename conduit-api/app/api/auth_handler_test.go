@@ -406,7 +406,8 @@ func failParseToken(accessToken string) (int64, error) {
 func newTestRouter(service AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
-	return NewRouter(handler, service)
+	groupsHandler := NewGroupsHandler(nil)
+	return NewRouter(handler, groupsHandler, service)
 }
 
 func performJSONRequest(router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
