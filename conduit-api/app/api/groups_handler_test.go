@@ -15,183 +15,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type fakeDB struct {
-	createGroupFn             func(ctx context.Context, arg db.CreateGroupParams) (db.Group, error)
-	addMembershipFn           func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error)
-	listGroupMembershipsFn    func(ctx context.Context, groupID int64) ([]db.Membership, error)
-	listGroupsByOwnerFn       func(ctx context.Context, ownerID int64) ([]db.Group, error)
-	createJoinRequestFn       func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error)
-	listJoinRequestsByGroupFn func(ctx context.Context, groupID int64) ([]db.JoinRequest, error)
-	updateJoinRequestStatusFn func(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error)
-	updateGroupIsOpenFn       func(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error)
-	deleteMembershipFn        func(ctx context.Context, arg db.DeleteMembershipParams) (db.Membership, error)
-	updateGroupFn             func(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error)
-	deleteGroupFn             func(ctx context.Context, id int64) (db.Group, error)
-	getGroupByIDFn            func(ctx context.Context, id int64) (db.Group, error)
-}
-
-var _ db.Querier = (*fakeDB)(nil)
-
-func (f *fakeDB) AddFormAnswer(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error) {
-	return db.CollectionFormAnswer{}, nil
-}
-func (f *fakeDB) AddMembership(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-	if f.addMembershipFn != nil {
-		return f.addMembershipFn(ctx, arg)
-	}
-	return db.Membership{}, nil
-}
-func (f *fakeDB) CloseCollection(ctx context.Context, id int64) (db.Collection, error) {
-	return db.Collection{}, nil
-}
-func (f *fakeDB) ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error) {
-	return 0, nil
-}
-func (f *fakeDB) CreateCollection(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error) {
-	return db.Collection{}, nil
-}
-func (f *fakeDB) CreateCollectionForm(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error) {
-	return db.CollectionForm{}, nil
-}
-func (f *fakeDB) CreateCollectionFormField(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error) {
-	return db.CollectionFormField{}, nil
-}
-func (f *fakeDB) CreateFormSubmission(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error) {
-	return db.CollectionFormSubmission{}, nil
-}
-func (f *fakeDB) CreateGroup(ctx context.Context, arg db.CreateGroupParams) (db.Group, error) {
-	if f.createGroupFn != nil {
-		return f.createGroupFn(ctx, arg)
-	}
-	return db.Group{}, nil
-}
-func (f *fakeDB) CreatePasswordResetToken(ctx context.Context, arg db.CreatePasswordResetTokenParams) (db.PasswordResetToken, error) {
-	return db.PasswordResetToken{}, nil
-}
-func (f *fakeDB) CreatePayment(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error) {
-	return db.Payment{}, nil
-}
-func (f *fakeDB) CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error) {
-	return db.RefreshToken{}, nil
-}
-func (f *fakeDB) CreateUser(ctx context.Context, email string) (db.User, error) {
-	return db.User{}, nil
-}
-func (f *fakeDB) CreateUserCredential(ctx context.Context, arg db.CreateUserCredentialParams) (db.User, error) {
-	return db.User{}, nil
-}
-func (f *fakeDB) GetCollectionFormByCollectionID(ctx context.Context, collectionID int64) (db.CollectionForm, error) {
-	return db.CollectionForm{}, nil
-}
-func (f *fakeDB) GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (db.RefreshToken, error) {
-	return db.RefreshToken{}, nil
-}
-func (f *fakeDB) GetUserByEmail(ctx context.Context, email string) (db.User, error) {
-	return db.User{}, nil
-}
-func (f *fakeDB) GetUserByID(ctx context.Context, id int64) (db.User, error) { return db.User{}, nil }
-func (f *fakeDB) GetUserCredentialByEmail(ctx context.Context, email string) (db.User, error) {
-	return db.User{}, nil
-}
-func (f *fakeDB) ListCollectionFormFields(ctx context.Context, formID int64) ([]db.CollectionFormField, error) {
-	return nil, nil
-}
-func (f *fakeDB) ListCollectionsByGroup(ctx context.Context, groupID int64) ([]db.Collection, error) {
-	return nil, nil
-}
-func (f *fakeDB) ListFormAnswersBySubmission(ctx context.Context, submissionID int64) ([]db.CollectionFormAnswer, error) {
-	return nil, nil
-}
-func (f *fakeDB) ListGroupMemberships(ctx context.Context, groupID int64) ([]db.Membership, error) {
-	if f.listGroupMembershipsFn != nil {
-		return f.listGroupMembershipsFn(ctx, groupID)
-	}
-	return nil, nil
-}
-func (f *fakeDB) UpdateMembership(ctx context.Context, arg db.UpdateMembershipParams) (db.Membership, error) {
-	// For tests, emulate updating membership by returning the provided args
-	return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
-}
-func (f *fakeDB) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]db.Group, error) {
-	if f.listGroupsByOwnerFn != nil {
-		return f.listGroupsByOwnerFn(ctx, ownerID)
-	}
-	return nil, nil
-}
-func (f *fakeDB) CreateJoinRequest(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error) {
-	if f.createJoinRequestFn != nil {
-		return f.createJoinRequestFn(ctx, arg)
-	}
-	return db.JoinRequest{}, nil
-}
-func (f *fakeDB) ListJoinRequestsByGroup(ctx context.Context, groupID int64) ([]db.JoinRequest, error) {
-	if f.listJoinRequestsByGroupFn != nil {
-		return f.listJoinRequestsByGroupFn(ctx, groupID)
-	}
-	return nil, nil
-}
-func (f *fakeDB) UpdateJoinRequestStatus(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error) {
-	if f.updateJoinRequestStatusFn != nil {
-		return f.updateJoinRequestStatusFn(ctx, arg)
-	}
-	return db.JoinRequest{}, nil
-}
-func (f *fakeDB) UpdateGroupIsOpen(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error) {
-	if f.updateGroupIsOpenFn != nil {
-		return f.updateGroupIsOpenFn(ctx, arg)
-	}
-	return db.Group{}, nil
-}
-func (f *fakeDB) DeleteMembership(ctx context.Context, arg db.DeleteMembershipParams) (db.Membership, error) {
-	if f.deleteMembershipFn != nil {
-		return f.deleteMembershipFn(ctx, arg)
-	}
-	return db.Membership{}, nil
-}
-func (f *fakeDB) UpdateGroup(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error) {
-	if f.updateGroupFn != nil {
-		return f.updateGroupFn(ctx, arg)
-	}
-	return db.Group{}, nil
-}
-func (f *fakeDB) DeleteGroup(ctx context.Context, id int64) (db.Group, error) {
-	if f.deleteGroupFn != nil {
-		return f.deleteGroupFn(ctx, id)
-	}
-	return db.Group{}, nil
-}
-func (f *fakeDB) GetGroupByID(ctx context.Context, id int64) (db.Group, error) {
-	if f.getGroupByIDFn != nil {
-		return f.getGroupByIDFn(ctx, id)
-	}
-	return db.Group{}, nil
-}
-func (f *fakeDB) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]db.Payment, error) {
-	return nil, nil
-}
-func (f *fakeDB) ListUsers(ctx context.Context, arg db.ListUsersParams) ([]db.User, error) {
-	return nil, nil
-}
-func (f *fakeDB) MarkPasswordResetTokensUsedForUser(ctx context.Context, userID int64) error {
-	return nil
-}
-func (f *fakeDB) MarkPaymentFailed(ctx context.Context, id int64) (db.Payment, error) {
-	return db.Payment{}, nil
-}
-func (f *fakeDB) MarkPaymentPaid(ctx context.Context, id int64) (db.Payment, error) {
-	return db.Payment{}, nil
-}
-func (f *fakeDB) RevokeRefreshToken(ctx context.Context, tokenID string) error       { return nil }
-func (f *fakeDB) RevokeRefreshTokensForUser(ctx context.Context, userID int64) error { return nil }
-func (f *fakeDB) UpdateUserPasswordHash(ctx context.Context, arg db.UpdateUserPasswordHashParams) error {
-	return nil
-}
-
+// use the centralized fake in fake_db_test.go
 func newTestRouterWithDeps(service AuthService, dbq db.Querier) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
 	groupsHandler := NewGroupsHandler(dbq)
-	return NewRouter(handler, groupsHandler, service)
+	collectionsHandler := NewCollectionsHandler(dbq)
+	formsHandler := NewFormsHandler(dbq)
+	return NewRouter(handler, groupsHandler, collectionsHandler, formsHandler, service)
 }
 
 func performAuthJSONRequest(router *gin.Engine, method, path string, body any, token string) *httptest.ResponseRecorder {
@@ -316,6 +147,23 @@ func TestAddMembership_AdminSuccess(t *testing.T) {
 	fake := &fakeDB{
 		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
 			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
+		},
+		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/10/memberships", map[string]any{"user_id": 99, "role": string(db.MembershipRoleMember)}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestAddMembership_OwnerCanManageWithoutAdminMembership(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 42, Name: "G", IsOpen: false}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
 			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
@@ -476,6 +324,30 @@ func TestToggleIsOpen_OwnerSuccess(t *testing.T) {
 	}
 	if v, ok := out["is_open"].(bool); !ok || v != true {
 		t.Fatalf("expected is_open true, got %v", out)
+	}
+}
+
+func TestToggleIsOpen_OwnerCanClose(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 42, Name: "G", IsOpen: true}, nil
+		},
+		updateGroupIsOpenFn: func(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error) {
+			return db.Group{ID: arg.ID, OwnerID: 42, Name: "G", IsOpen: arg.IsOpen}, nil
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPatch, "/api/groups/5/is_open", map[string]any{"is_open": false}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if v, ok := out["is_open"].(bool); !ok || v != false {
+		t.Fatalf("expected is_open false, got %v", out)
 	}
 }
 

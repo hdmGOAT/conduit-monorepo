@@ -23,14 +23,11 @@ type meResponse struct {
 	PFPURL      string `json:"pfp_url"`
 }
 
+// use the centralized fake in fake_db_test.go
 type validationErrorResponse struct {
-	Error   string `json:"error"`
-	Details []struct {
-		Field   string `json:"field"`
-		Message string `json:"message"`
-	} `json:"details"`
+	Error   string             `json:"error"`
+	Details []fieldErrorDetail `json:"details"`
 }
-
 type fakeAuthService struct {
 	registerFn         func(ctx context.Context, email, password, displayName string) (auth.Session, error)
 	loginFn            func(ctx context.Context, email, password string) (auth.Session, error)
@@ -43,14 +40,23 @@ type fakeAuthService struct {
 }
 
 func (f *fakeAuthService) Register(ctx context.Context, email, password, displayName string) (auth.Session, error) {
+	if f.registerFn == nil {
+		return auth.Session{}, errors.New("unexpected register call")
+	}
 	return f.registerFn(ctx, email, password, displayName)
 }
 
 func (f *fakeAuthService) Login(ctx context.Context, email, password string) (auth.Session, error) {
+	if f.loginFn == nil {
+		return auth.Session{}, errors.New("unexpected login call")
+	}
 	return f.loginFn(ctx, email, password)
 }
 
 func (f *fakeAuthService) Refresh(ctx context.Context, refreshToken string) (auth.Session, error) {
+	if f.refreshFn == nil {
+		return auth.Session{}, errors.New("unexpected refresh call")
+	}
 	return f.refreshFn(ctx, refreshToken)
 }
 
@@ -407,7 +413,9 @@ func newTestRouter(service AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
 	groupsHandler := NewGroupsHandler(nil)
-	return NewRouter(handler, groupsHandler, service)
+	collectionsHandler := NewCollectionsHandler(nil)
+	formsHandler := NewFormsHandler(nil)
+	return NewRouter(handler, groupsHandler, collectionsHandler, formsHandler, service)
 }
 
 func performJSONRequest(router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {

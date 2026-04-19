@@ -304,8 +304,8 @@ WITH params(user_id, group_id, status) AS (
 UPDATE join_requests
 SET status = params.status
 FROM params
-WHERE user_id = params.user_id AND group_id = params.group_id
-RETURNING user_id, group_id, status, created_at
+WHERE join_requests.user_id = params.user_id AND join_requests.group_id = params.group_id
+RETURNING join_requests.user_id, join_requests.group_id, join_requests.status, join_requests.created_at
 `
 
 type UpdateJoinRequestStatusParams struct {

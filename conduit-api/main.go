@@ -36,7 +36,9 @@ func main() {
 	authService := auth.NewService(queries, tokenManager, resetEmailSender, cfg.FrontendURL, cfg.PasswordResetTTL)
 	authHandler := api.NewAuthHandler(authService, cfg.CookieSecure, tokenManager.RefreshTTLSeconds())
 	groupsHandler := api.NewGroupsHandler(queries)
-	router := api.NewRouter(authHandler, groupsHandler, authService)
+	collectionsHandler := api.NewCollectionsHandler(queries)
+	formsHandler := api.NewFormsHandler(queries)
+	router := api.NewRouter(authHandler, groupsHandler, collectionsHandler, formsHandler, authService)
 
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server failed: %v", err)

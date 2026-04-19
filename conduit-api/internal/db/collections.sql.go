@@ -58,6 +58,26 @@ func (q *Queries) CreateCollection(ctx context.Context, arg CreateCollectionPara
 	return i, err
 }
 
+const deleteCollection = `-- name: DeleteCollection :one
+DELETE FROM collections
+WHERE id = $1
+RETURNING id, group_id, amount, deadline, status, created_at
+`
+
+func (q *Queries) DeleteCollection(ctx context.Context, id int64) (Collection, error) {
+	row := q.db.QueryRow(ctx, deleteCollection, id)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Amount,
+		&i.Deadline,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listCollectionsByGroup = `-- name: ListCollectionsByGroup :many
 SELECT id, group_id, amount, deadline, status, created_at
 FROM collections
@@ -90,4 +110,31 @@ func (q *Queries) ListCollectionsByGroup(ctx context.Context, groupID int64) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCollection = `-- name: UpdateCollection :one
+UPDATE collections
+SET amount = $2, deadline = $3
+WHERE id = $1
+RETURNING id, group_id, amount, deadline, status, created_at
+`
+
+type UpdateCollectionParams struct {
+	ID       int64              `json:"id"`
+	Amount   int64              `json:"amount"`
+	Deadline pgtype.Timestamptz `json:"deadline"`
+}
+
+func (q *Queries) UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (Collection, error) {
+	row := q.db.QueryRow(ctx, updateCollection, arg.ID, arg.Amount, arg.Deadline)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Amount,
+		&i.Deadline,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
 }

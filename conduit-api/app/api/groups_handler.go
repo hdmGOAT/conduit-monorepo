@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -110,21 +111,17 @@ func (h *GroupsHandler) AddMembership(c *gin.Context) {
 		return
 	}
 
-	// check caller is admin
-	memberships, err := h.db.ListGroupMemberships(c.Request.Context(), groupID)
+	_, callerRole, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch memberships"})
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group access"})
 		return
 	}
-	isAdmin := false
-	for _, m := range memberships {
-		if m.UserID == callerID && m.Role == db.MembershipRoleAdmin {
-			isAdmin = true
-			break
-		}
-	}
-	if !isAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "must be admin to add members"})
+	if callerRole != db.MembershipRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to add members"})
 		return
 	}
 
@@ -181,7 +178,7 @@ func (h *GroupsHandler) ListMemberships(c *gin.Context) {
 }
 
 type updateIsOpenRequest struct {
-	IsOpen bool `json:"is_open" binding:"required"`
+	IsOpen *bool `json:"is_open"`
 }
 
 // ToggleIsOpen sets the group's open status. Only the group owner may change this.
@@ -223,8 +220,12 @@ func (h *GroupsHandler) ToggleIsOpen(c *gin.Context) {
 		respondValidationError(c, err)
 		return
 	}
+	if req.IsOpen == nil {
+		respondFieldValidationError(c, "is_open", "is required")
+		return
+	}
 
-	updated, err := h.db.UpdateGroupIsOpen(c.Request.Context(), db.UpdateGroupIsOpenParams{ID: groupID, IsOpen: req.IsOpen})
+	updated, err := h.db.UpdateGroupIsOpen(c.Request.Context(), db.UpdateGroupIsOpenParams{ID: groupID, IsOpen: *req.IsOpen})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update group"})
 		return
@@ -431,20 +432,17 @@ func (h *GroupsHandler) ListJoinRequests(c *gin.Context) {
 		return
 	}
 
-	memberships, err := h.db.ListGroupMemberships(c.Request.Context(), groupID)
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch memberships"})
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group access"})
 		return
 	}
-	isAdmin := false
-	for _, m := range memberships {
-		if m.UserID == callerID && m.Role == db.MembershipRoleAdmin {
-			isAdmin = true
-			break
-		}
-	}
-	if !isAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "must be admin to view join requests"})
+	if role != db.MembershipRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to view join requests"})
 		return
 	}
 
@@ -492,20 +490,17 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 		return
 	}
 
-	memberships, err := h.db.ListGroupMemberships(c.Request.Context(), groupID)
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch memberships"})
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group access"})
 		return
 	}
-	isAdmin := false
-	for _, m := range memberships {
-		if m.UserID == callerID && m.Role == db.MembershipRoleAdmin {
-			isAdmin = true
-			break
-		}
-	}
-	if !isAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "must be admin to manage join requests"})
+	if role != db.MembershipRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to manage join requests"})
 		return
 	}
 
@@ -552,6 +547,7 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 
 		_, err = h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{Column1: targetUserID, Column2: groupID, Column3: status})
 		if err != nil {
+			log.Printf("UpdateJoinRequestStatus error (approve) user=%d group=%d: %v", targetUserID, groupID, err)
 			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 				c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
 				return
@@ -566,6 +562,7 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 
 	jr, err := h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{Column1: targetUserID, Column2: groupID, Column3: status})
 	if err != nil {
+		log.Printf("UpdateJoinRequestStatus error user=%d group=%d: %v", targetUserID, groupID, err)
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
 			return
@@ -651,17 +648,27 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 		return
 	}
 
-	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
+	grp, callerRole, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group access"})
 		return
 	}
 	if grp.OwnerID == targetUserID {
 		c.JSON(http.StatusForbidden, gin.H{"error": "cannot remove group owner"})
+		return
+	}
+
+	var targetRole db.MembershipRole
+	if callerRole == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "caller is not a member of the group"})
+		return
+	}
+	if callerRole != db.MembershipRoleAdmin && callerRole != db.MembershipRoleModerator {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner, admin or moderator to remove members"})
 		return
 	}
 
@@ -670,28 +677,10 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch memberships"})
 		return
 	}
-
-	var callerRole db.MembershipRole
-	var targetRole db.MembershipRole
 	for _, m := range memberships {
-		if m.UserID == callerID {
-			callerRole = m.Role
-		}
 		if m.UserID == targetUserID {
 			targetRole = m.Role
 		}
-	}
-
-	// explicit membership existence check for caller
-	if callerRole == "" {
-		c.JSON(http.StatusNotFound, gin.H{"error": "caller is not a member of the group"})
-		return
-	}
-
-	// only admins or moderators can manage members
-	if callerRole != db.MembershipRoleAdmin && callerRole != db.MembershipRoleModerator {
-		c.JSON(http.StatusForbidden, gin.H{"error": "must be admin or moderator to remove members"})
-		return
 	}
 
 	// explicit membership existence check for target after permission check

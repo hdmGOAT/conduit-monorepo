@@ -14,3 +14,14 @@ UPDATE collections
 SET status = 'closed'
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateCollection :one
+UPDATE collections
+SET amount = $2, deadline = $3
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteCollection :one
+DELETE FROM collections
+WHERE id = $1
+RETURNING *;

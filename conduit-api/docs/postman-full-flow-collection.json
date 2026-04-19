@@ -3,7 +3,7 @@
     "_postman_id": "f2d7c9f2-6b3a-4c2a-a2f1-abcdef123456",
     "name": "Conduit API - Full Flow",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Full end-to-end flow: user signup/login, create groups (open/closed), join requests, approvals, moderator eject, leave, update and delete. Configure environment variables before running (base_url and emails/passwords)."
+    "description": "Automated end-to-end flow covering auth, group lifecycle, join requests, collections, forms, submissions, answers, and cleanup."
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
@@ -20,16 +20,27 @@
     { "key": "victim_password", "value": "password123", "type": "string" },
     { "key": "victim_display_name", "value": "Victim", "type": "string" },
     { "key": "owner_access_token", "value": "", "type": "string" },
+    { "key": "owner_refresh_token", "value": "", "type": "string" },
     { "key": "moderator_access_token", "value": "", "type": "string" },
+    { "key": "moderator_refresh_token", "value": "", "type": "string" },
     { "key": "member_access_token", "value": "", "type": "string" },
+    { "key": "member_refresh_token", "value": "", "type": "string" },
     { "key": "victim_access_token", "value": "", "type": "string" },
+    { "key": "victim_refresh_token", "value": "", "type": "string" },
     { "key": "owner_user_id", "value": "", "type": "string" },
     { "key": "moderator_user_id", "value": "", "type": "string" },
     { "key": "member_user_id", "value": "", "type": "string" },
     { "key": "victim_user_id", "value": "", "type": "string" },
     { "key": "group_closed_id", "value": "", "type": "string" },
     { "key": "group_open_id", "value": "", "type": "string" },
-    { "key": "group_moderator_id", "value": "", "type": "string" }
+    { "key": "group_moderator_id", "value": "", "type": "string" },
+    { "key": "collection_id", "value": "", "type": "string" },
+    { "key": "form_id", "value": "", "type": "string" },
+    { "key": "field_id", "value": "", "type": "string" },
+    { "key": "secondary_field_id", "value": "", "type": "string" },
+    { "key": "submission_id", "value": "", "type": "string" },
+    { "key": "answer_id", "value": "", "type": "string" },
+    { "key": "extra_answer_id", "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -37,252 +48,587 @@
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\",\n  \"display_name\": \"{{owner_display_name}}\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/auth/register", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "register" ] }
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{owner_email}}\",\"password\":\"{{owner_password}}\",\"display_name\":\"{{owner_display_name}}\"}" },
+        "url": "{{base_url}}/api/auth/register"
       },
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('owner_access_token', json.access_token); pm.environment.set('owner_refresh_token', json.refresh_token); }", "pm.test('register ok or conflict', function(){pm.expect([200,409]).to.include(pm.response.code);});" ] } } ]
     },
     {
       "name": "Owner - Login",
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{owner_email}}\",\n  \"password\": \"{{owner_password}}\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/auth/login", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "login" ] }
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{owner_email}}\",\"password\":\"{{owner_password}}\"}" },
+        "url": "{{base_url}}/api/auth/login"
       },
-      "event": [
-        {
-          "listen": "test",
-          "script": {
-            "type": "text/javascript",
-            "exec": [
-              "if (pm.response.code === 200) {",
-              "  var json = pm.response.json();",
-              "  pm.environment.set('owner_access_token', json.access_token);",
-              "  pm.environment.set('owner_refresh_token', json.refresh_token);",
-              "} else {",
-              "  console.log('Owner login returned', pm.response.code);",
-              "}"
-            ]
-          }
-        }
-      ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('login returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('owner_access_token', json.access_token); pm.environment.set('owner_refresh_token', json.refresh_token); }" ] } } ]
+    },
+    {
+      "name": "Owner - Refresh",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "X-Refresh-Token", "value": "{{owner_refresh_token}}" } ],
+        "url": "{{base_url}}/api/auth/refresh"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('refresh returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('owner_access_token', json.access_token); pm.environment.set('owner_refresh_token', json.refresh_token); }" ] } } ]
     },
     {
       "name": "Owner - Me",
       "request": {
         "method": "GET",
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/auth/me", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "me" ] }
+        "url": "{{base_url}}/api/auth/me"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('owner_user_id', json.id);" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { pm.environment.set('owner_user_id', pm.response.json().id); }" ] } } ]
     },
-
-    { "name": "Moderator - Register", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{moderator_email}}\",\n  \"password\": \"{{moderator_password}}\",\n  \"display_name\": \"{{moderator_display_name}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/register", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "register" ] } }, "response": [] },
-    { "name": "Moderator - Login", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{moderator_email}}\",\n  \"password\": \"{{moderator_password}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/login", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "login" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('moderator_access_token', json.access_token); pm.environment.set('moderator_refresh_token', json.refresh_token); }" ] } } ], "response": [] },
-    { "name": "Moderator - Me", "request": { "method": "GET", "header": [ { "key": "Authorization", "value": "Bearer {{moderator_access_token}}" } ], "url": { "raw": "{{base_url}}/api/auth/me", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "me" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('moderator_user_id', json.id);" ] } } ], "response": [] },
-
-    { "name": "Member - Register", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{member_email}}\",\n  \"password\": \"{{member_password}}\",\n  \"display_name\": \"{{member_display_name}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/register", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "register" ] } }, "response": [] },
-    { "name": "Member - Login", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{member_email}}\",\n  \"password\": \"{{member_password}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/login", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "login" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('member_access_token', json.access_token); pm.environment.set('member_refresh_token', json.refresh_token); }" ] } } ], "response": [] },
-    { "name": "Member - Me", "request": { "method": "GET", "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ], "url": { "raw": "{{base_url}}/api/auth/me", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "me" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('member_user_id', json.id);" ] } } ], "response": [] },
-
-    { "name": "Victim - Register", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{victim_email}}\",\n  \"password\": \"{{victim_password}}\",\n  \"display_name\": \"{{victim_display_name}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/register", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "register" ] } }, "response": [] },
-    { "name": "Victim - Login", "request": { "method": "POST", "header": [ { "key": "Content-Type", "value": "application/json" } ], "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{victim_email}}\",\n  \"password\": \"{{victim_password}}\"\n}", "options": { "raw": { "language": "json" } } }, "url": { "raw": "{{base_url}}/api/auth/login", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "login" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('victim_access_token', json.access_token); pm.environment.set('victim_refresh_token', json.refresh_token); }" ] } } ], "response": [] },
-    { "name": "Victim - Me", "request": { "method": "GET", "header": [ { "key": "Authorization", "value": "Bearer {{victim_access_token}}" } ], "url": { "raw": "{{base_url}}/api/auth/me", "host": [ "{{base_url}}" ], "path": [ "api", "auth", "me" ] } }, "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('victim_user_id', json.id);" ] } } ], "response": [] },
-
     {
-      "name": "Create Closed Group (owner)",
+      "name": "Moderator - Register",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{moderator_email}}\",\"password\":\"{{moderator_password}}\",\"display_name\":\"{{moderator_display_name}}\"}" },
+        "url": "{{base_url}}/api/auth/register"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('moderator_access_token', json.access_token); pm.environment.set('moderator_refresh_token', json.refresh_token); }", "pm.test('register ok or conflict', function(){pm.expect([200,409]).to.include(pm.response.code);});" ] } } ]
+    },
+    {
+      "name": "Moderator - Login",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{moderator_email}}\",\"password\":\"{{moderator_password}}\"}" },
+        "url": "{{base_url}}/api/auth/login"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('login returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('moderator_access_token', json.access_token); pm.environment.set('moderator_refresh_token', json.refresh_token); }" ] } } ]
+    },
+    {
+      "name": "Moderator - Me",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{moderator_access_token}}" } ],
+        "url": "{{base_url}}/api/auth/me"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { pm.environment.set('moderator_user_id', pm.response.json().id); }" ] } } ]
+    },
+    {
+      "name": "Member - Register",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{member_email}}\",\"password\":\"{{member_password}}\",\"display_name\":\"{{member_display_name}}\"}" },
+        "url": "{{base_url}}/api/auth/register"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('member_access_token', json.access_token); pm.environment.set('member_refresh_token', json.refresh_token); }", "pm.test('register ok or conflict', function(){pm.expect([200,409]).to.include(pm.response.code);});" ] } } ]
+    },
+    {
+      "name": "Member - Login",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{member_email}}\",\"password\":\"{{member_password}}\"}" },
+        "url": "{{base_url}}/api/auth/login"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('login returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('member_access_token', json.access_token); pm.environment.set('member_refresh_token', json.refresh_token); }" ] } } ]
+    },
+    {
+      "name": "Member - Me",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/auth/me"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { pm.environment.set('member_user_id', pm.response.json().id); }" ] } } ]
+    },
+    {
+      "name": "Victim - Register",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{victim_email}}\",\"password\":\"{{victim_password}}\",\"display_name\":\"{{victim_display_name}}\"}" },
+        "url": "{{base_url}}/api/auth/register"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('victim_access_token', json.access_token); pm.environment.set('victim_refresh_token', json.refresh_token); }", "pm.test('register ok or conflict', function(){pm.expect([200,409]).to.include(pm.response.code);});" ] } } ]
+    },
+    {
+      "name": "Victim - Login",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" } ],
+        "body": { "mode": "raw", "raw": "{\"email\":\"{{victim_email}}\",\"password\":\"{{victim_password}}\"}" },
+        "url": "{{base_url}}/api/auth/login"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('login returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('victim_access_token', json.access_token); pm.environment.set('victim_refresh_token', json.refresh_token); }" ] } } ]
+    },
+    {
+      "name": "Victim - Me",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{victim_access_token}}" } ],
+        "url": "{{base_url}}/api/auth/me"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('me returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { pm.environment.set('victim_user_id', pm.response.json().id); }" ] } } ]
+    },
+    {
+      "name": "Create Closed Group",
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"ClosedGroup\",\n  \"is_open\": false\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups", "host": [ "{{base_url}}" ], "path": [ "api", "groups" ] }
+        "body": { "mode": "raw", "raw": "{\"name\":\"ClosedGroup\",\"is_open\":false}" },
+        "url": "{{base_url}}/api/groups"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create closed group ok', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('group_closed_id', json.id);" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create closed group ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('group_closed_id', json.id); }" ] } } ]
     },
     {
-      "name": "Create Open Group (owner)",
+      "name": "Create Open Group",
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"OpenGroup\",\n  \"is_open\": true\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups", "host": [ "{{base_url}}" ], "path": [ "api", "groups" ] }
+        "body": { "mode": "raw", "raw": "{\"name\":\"OpenGroup\",\"is_open\":true}" },
+        "url": "{{base_url}}/api/groups"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create open group ok', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('group_open_id', json.id);" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create open group ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('group_open_id', json.id); }" ] } } ]
     },
     {
-      "name": "Create Moderator Group (owner)",
+      "name": "Create Moderator Group",
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"ModeratorGroup\",\n  \"is_open\": false\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups", "host": [ "{{base_url}}" ], "path": [ "api", "groups" ] }
+        "body": { "mode": "raw", "raw": "{\"name\":\"ModeratorGroup\",\"is_open\":false}" },
+        "url": "{{base_url}}/api/groups"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create moderator group ok', function(){pm.response.to.have.status(200);});", "var json = pm.response.json();", "pm.environment.set('group_moderator_id', json.id);" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create moderator group ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('group_moderator_id', json.id); }" ] } } ]
     },
-
     {
-      "name": "Member requests join (closed)",
-      "request": {
-        "method": "POST",
-        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}/join", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}", "join" ] }
-      },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('request join returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
-    },
-
-    {
-      "name": "Owner lists join requests (closed)",
+      "name": "List Owned Groups",
       "request": {
         "method": "GET",
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}/join-requests", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}", "join-requests" ] }
+        "url": "{{base_url}}/api/groups/owned"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list join requests ok', function(){pm.response.to.have.status(200);});", "var arr = pm.response.json();", "var found = arr.some(function(j){ return j.user_id == parseInt(pm.environment.get('member_user_id')); });", "pm.test('member join request exists', function(){pm.expect(found).to.be.true;});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('owned groups returns 200', function(){pm.response.to.have.status(200);});", "var groups = pm.response.json(); pm.test('owned groups include created groups', function(){ pm.expect(['group_closed_id','group_open_id','group_moderator_id'].every(function(key){ return groups.some(function(group){ return String(group.id) === String(pm.environment.get(key)); }); })).to.be.true; });" ] } } ]
     },
-
     {
-      "name": "Owner approves join request (closed)",
+      "name": "Owner Adds Moderator to Moderator Group",
       "request": {
-        "method": "PATCH",
+        "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"status\": \"approved\",\n  \"role\": \"member\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}/join-requests/{{member_user_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}", "join-requests", "{{member_user_id}}" ] }
+        "body": { "mode": "raw", "raw": "{\"user_id\":{{moderator_user_id}},\"role\":\"moderator\"}" },
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('approve returns 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add moderator ok', function(){pm.response.to.have.status(200);});" ] } } ]
     },
-
     {
-      "name": "Member checks membership (closed)",
+      "name": "Owner Adds Victim to Moderator Group",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"user_id\":{{victim_user_id}},\"role\":\"member\"}" },
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add victim ok', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "List Moderator Group Memberships",
       "request": {
         "method": "GET",
-        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}", "memberships" ] }
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var arr = pm.response.json();", "var found = arr.some(function(m){ return m.user_id == parseInt(pm.environment.get('member_user_id')); });", "pm.test('member is now in members', function(){pm.expect(found).to.be.true;});" ] } } ],
-      "response": []
-    },
-
-    {
-      "name": "Member joins open group (auto)",
-      "request": {
-        "method": "POST",
-        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_open_id}}/join", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_open_id}}", "join" ] }
-      },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('auto-join returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
-    },
-
-    {
-      "name": "Member checks membership (open)",
-      "request": {
-        "method": "GET",
-        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_open_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_open_id}}", "memberships" ] }
-      },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var arr = pm.response.json();", "var found = arr.some(function(m){ return m.user_id == parseInt(pm.environment.get('member_user_id')); });", "pm.test('member auto-joined', function(){pm.expect(found).to.be.true;});" ] } } ],
-      "response": []
-    },
-
-    {
-      "name": "Owner adds moderator and victim to moderator group",
-      "request": {
-        "method": "POST",
-        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"user_id\": {{moderator_user_id}},\n  \"role\": \"moderator\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_moderator_id}}", "memberships" ] }
-      },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add moderator ok', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var memberships = pm.response.json(); var ownerId = String(pm.environment.get('owner_user_id')); var moderatorId = String(pm.environment.get('moderator_user_id')); var victimId = String(pm.environment.get('victim_user_id')); pm.test('moderator group has owner, moderator, victim', function(){ pm.expect(memberships.some(function(m){ return String(m.user_id) === ownerId && m.role === 'admin'; }) && memberships.some(function(m){ return String(m.user_id) === moderatorId && m.role === 'moderator'; }) && memberships.some(function(m){ return String(m.user_id) === victimId && m.role === 'member'; })).to.be.true; });" ] } } ]
     },
     {
-      "name": "Owner adds victim to moderator group",
-      "request": {
-        "method": "POST",
-        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"user_id\": {{victim_user_id}},\n  \"role\": \"member\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_moderator_id}}", "memberships" ] }
-      },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add victim ok', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
-    },
-
-    {
-      "name": "Moderator ejects victim",
+      "name": "Moderator Ejects Victim",
       "request": {
         "method": "DELETE",
         "header": [ { "key": "Authorization", "value": "Bearer {{moderator_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships/{{victim_user_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_moderator_id}}", "memberships", "{{victim_user_id}}" ] }
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships/{{victim_user_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('eject returned 200', function(){pm.response.to.have.status(200);});", "// verify victim no longer in members", "pm.sendRequest({ url: pm.environment.get('base_url') + '/api/groups/' + pm.environment.get('group_moderator_id') + '/memberships', method: 'GET', header: { 'Authorization': 'Bearer ' + pm.environment.get('owner_access_token') } }, function(err, res) { var arr = res.json(); var found = arr.some(function(m){ return m.user_id == parseInt(pm.environment.get('victim_user_id')); }); pm.test('victim removed', function(){pm.expect(found).to.be.false;}); });" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('eject returned 200', function(){pm.response.to.have.status(200);});" ] } } ]
     },
-
     {
-      "name": "Member leaves open group (self)",
+      "name": "List Moderator Group Memberships After Eject",
       "request": {
-        "method": "DELETE",
-        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_open_id}}/memberships/me", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_open_id}}", "memberships", "me" ] }
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}/memberships"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('leave returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var memberships = pm.response.json(); var victimId = String(pm.environment.get('victim_user_id')); pm.test('victim removed', function(){ pm.expect(memberships.some(function(m){ return String(m.user_id) === victimId; })).to.be.false; });" ] } } ]
     },
-
     {
-      "name": "Owner updates closed group name",
+      "name": "Member Requests Join Closed Group",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}/join"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('request join returned 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Owner Lists Closed Join Requests",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}/join-requests"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list join requests ok', function(){pm.response.to.have.status(200);});", "var requests = pm.response.json(); var memberId = String(pm.environment.get('member_user_id')); pm.test('member join request exists', function(){ pm.expect(requests.some(function(j){ return String(j.user_id) === memberId; })).to.be.true; });" ] } } ]
+    },
+    {
+      "name": "Owner Approves Closed Join Request",
       "request": {
         "method": "PATCH",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\n  \"name\": \"ClosedGroupRenamed\"\n}", "options": { "raw": { "language": "json" } } },
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}" ] }
+        "body": { "mode": "raw", "raw": "{\"status\":\"approved\",\"role\":\"member\"}" },
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}/join-requests/{{member_user_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('approve returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
     },
-
     {
-      "name": "Owner deletes moderator group",
+      "name": "Member Lists Closed Membership",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}/memberships"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var memberships = pm.response.json(); var memberId = String(pm.environment.get('member_user_id')); pm.test('member is now in closed group', function(){ pm.expect(memberships.some(function(m){ return String(m.user_id) === memberId && m.role === 'member'; })).to.be.true; });" ] } } ]
+    },
+    {
+      "name": "Member Joins Open Group",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/join"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('auto-join returned 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Member Lists Open Membership",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/memberships"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list memberships ok', function(){pm.response.to.have.status(200);});", "var memberships = pm.response.json(); var memberId = String(pm.environment.get('member_user_id')); pm.test('member is in open group', function(){ pm.expect(memberships.some(function(m){ return String(m.user_id) === memberId && m.role === 'member'; })).to.be.true; });" ] } } ]
+    },
+    {
+      "name": "Owner Toggles Open Group Closed",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"is_open\":false}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/is_open"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('toggle closed returns 200', function(){pm.response.to.have.status(200);});", "pm.test('group is closed', function(){pm.expect(pm.response.json().is_open).to.eql(false);});" ] } } ]
+    },
+    {
+      "name": "Owner Toggles Open Group Open",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"is_open\":true}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/is_open"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('toggle open returns 200', function(){pm.response.to.have.status(200);});", "pm.test('group is open', function(){pm.expect(pm.response.json().is_open).to.eql(true);});" ] } } ]
+    },
+    {
+      "name": "Owner Renames Closed Group",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"name\":\"ClosedGroupRenamed\"}" },
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update returned 200', function(){pm.response.to.have.status(200);});", "pm.test('group renamed', function(){pm.expect(pm.response.json().name).to.eql('ClosedGroupRenamed');});" ] } } ]
+    },
+    {
+      "name": "Create Collection on Open Group",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"amount\":1000,\"deadline\":\"2027-12-31T23:59:59Z\"}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/collections"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create collection ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('collection_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "List Collections by Group",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/collections"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list collections returns 200', function(){pm.response.to.have.status(200);});", "var collections = pm.response.json(); var collectionId = String(pm.environment.get('collection_id')); pm.test('collection is listed', function(){ pm.expect(collections.some(function(c){ return String(c.id) === collectionId; })).to.be.true; });" ] } } ]
+    },
+    {
+      "name": "Update Collection",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"amount\":2000,\"deadline\":\"2027-11-30T23:59:59Z\"}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/collections/{{collection_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update collection returns 200', function(){pm.response.to.have.status(200);});", "pm.test('collection updated', function(){ var json = pm.response.json(); pm.expect(json.amount).to.eql(2000); });" ] } } ]
+    },
+    {
+      "name": "Create Collection Form",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"title\":\"Signup Form\",\"description\":\"Form for collection\",\"is_required\":false}" },
+        "url": "{{base_url}}/api/collections/{{collection_id}}/form"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create form returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('form_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "Get Collection Form By Collection",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/form"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('get form by collection returns 200', function(){pm.response.to.have.status(200);});", "pm.test('form belongs to collection', function(){pm.expect(pm.response.json().collection_id).to.eql(Number(pm.environment.get('collection_id')));});" ] } } ]
+    },
+    {
+      "name": "Update Collection Form",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"title\":\"Signup Form v2\",\"description\":\"Updated form\",\"is_required\":true}" },
+        "url": "{{base_url}}/api/forms/{{form_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update form returns 200', function(){pm.response.to.have.status(200);});", "pm.test('form updated', function(){pm.expect(pm.response.json().title).to.eql('Signup Form v2');});" ] } } ]
+    },
+    {
+      "name": "Get Collection Form By ID",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/forms/{{form_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('get form by id returns 200', function(){pm.response.to.have.status(200);});", "pm.test('updated form title visible', function(){pm.expect(pm.response.json().title).to.eql('Signup Form v2');});" ] } } ]
+    },
+    {
+      "name": "Create Name Field",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"field_key\":\"name\",\"label\":\"Name\",\"field_type\":\"text\",\"placeholder\":\"Full name\",\"is_required\":true,\"sort_order\":1}" },
+        "url": "{{base_url}}/api/forms/{{form_id}}/fields"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create name field returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('field_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "Create Color Field",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"field_key\":\"favorite_color\",\"label\":\"Favorite Color\",\"field_type\":\"select\",\"placeholder\":\"Pick one\",\"is_required\":false,\"options\":[\"red\",\"blue\"],\"sort_order\":2}" },
+        "url": "{{base_url}}/api/forms/{{form_id}}/fields"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create color field returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('secondary_field_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "List Collection Form Fields",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/forms/{{form_id}}/fields"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list fields returns 200', function(){pm.response.to.have.status(200);});", "var fields = pm.response.json(); pm.test('two fields exist', function(){pm.expect(fields.length).to.eql(2);});" ] } } ]
+    },
+    {
+      "name": "Member Creates Form Submission",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"collection_id\":{{collection_id}},\"answers\":[{\"field_id\":{{field_id}},\"value_text\":\"Alice\"}]}" },
+        "url": "{{base_url}}/api/forms/{{form_id}}/submissions"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create submission returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('submission_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "List Submissions by Collection",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/submissions"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list submissions returns 200', function(){pm.response.to.have.status(200);});", "var submissions = pm.response.json(); var submissionId = String(pm.environment.get('submission_id')); pm.test('submission is listed', function(){ pm.expect(submissions.some(function(s){ return String(s.id) === submissionId; })).to.be.true; });" ] } } ]
+    },
+    {
+      "name": "Get Submission by ID",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/forms/{{form_id}}/submissions/{{submission_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('get submission returns 200', function(){pm.response.to.have.status(200);});", "pm.test('submission id matches', function(){pm.expect(pm.response.json().id).to.eql(Number(pm.environment.get('submission_id')));});" ] } } ]
+    },
+    {
+      "name": "List Answers by Submission",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/submissions/{{submission_id}}/answers"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list answers returns 200', function(){pm.response.to.have.status(200);});", "var answers = pm.response.json(); if (answers.length) { pm.environment.set('answer_id', answers[0].id); } pm.test('one initial answer exists', function(){pm.expect(answers.length).to.eql(1);});" ] } } ]
+    },
+    {
+      "name": "Get Answer by ID",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/answers/{{answer_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('get answer returns 200', function(){pm.response.to.have.status(200);});", "pm.test('answer field matches', function(){pm.expect(pm.response.json().field_id).to.eql(Number(pm.environment.get('field_id')));});" ] } } ]
+    },
+    {
+      "name": "Update Answer",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"value_text\":\"Alicia\"}" },
+        "url": "{{base_url}}/api/answers/{{answer_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update answer returns 200', function(){pm.response.to.have.status(200);});", "pm.test('answer updated', function(){pm.expect(pm.response.json().value_text).to.eql('Alicia');});" ] } } ]
+    },
+    {
+      "name": "Add Color Answer",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"field_id\":{{secondary_field_id}},\"value_json\":{\"selected\":\"blue\"}}" },
+        "url": "{{base_url}}/api/submissions/{{submission_id}}/answers"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add answer returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('extra_answer_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "List Answers by Submission After Add",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/submissions/{{submission_id}}/answers"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list answers returns 200', function(){pm.response.to.have.status(200);});", "var answers = pm.response.json(); pm.test('two answers exist', function(){pm.expect(answers.length).to.eql(2);});" ] } } ]
+    },
+    {
+      "name": "Delete Color Answer",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/answers/{{extra_answer_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete answer returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "List Answers by Submission After Delete",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/submissions/{{submission_id}}/answers"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list answers returns 200', function(){pm.response.to.have.status(200);});", "var answers = pm.response.json(); pm.test('one answer remains', function(){pm.expect(answers.length).to.eql(1);});" ] } } ]
+    },
+    {
+      "name": "Update Submission",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"form_id\":{{form_id}},\"collection_id\":{{collection_id}}}" },
+        "url": "{{base_url}}/api/forms/{{form_id}}/submissions/{{submission_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update submission returns 200', function(){pm.response.to.have.status(200);});", "pm.test('submission identifiers preserved', function(){ var json = pm.response.json(); pm.expect(json.form_id).to.eql(Number(pm.environment.get('form_id'))); pm.expect(json.collection_id).to.eql(Number(pm.environment.get('collection_id'))); });" ] } } ]
+    },
+    {
+      "name": "Close Collection",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/collections/{{collection_id}}/close"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('close collection returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Delete Submission",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/forms/{{form_id}}/submissions/{{submission_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete submission returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "List Submissions by Collection After Delete",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/submissions"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list submissions returns 200', function(){pm.response.to.have.status(200);});", "var submissions = pm.response.json(); pm.test('no submissions remain', function(){pm.expect(submissions.length).to.eql(0);});" ] } } ]
+    },
+    {
+      "name": "Delete Collection Form",
       "request": {
         "method": "DELETE",
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_moderator_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_moderator_id}}" ] }
+        "url": "{{base_url}}/api/forms/{{form_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete form returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
     },
-
     {
-      "name": "Owner deletes closed group",
+      "name": "Delete Collection",
       "request": {
         "method": "DELETE",
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_closed_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_closed_id}}" ] }
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/collections/{{collection_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete closed returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete collection returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
     },
-
     {
-      "name": "Owner deletes open group",
+      "name": "Member Leaves Open Group",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/memberships/me"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('leave group returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Owner Deletes Moderator Group",
       "request": {
         "method": "DELETE",
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "url": { "raw": "{{base_url}}/api/groups/{{group_open_id}}", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_open_id}}" ] }
+        "url": "{{base_url}}/api/groups/{{group_moderator_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete open returned 200', function(){pm.response.to.have.status(200);});" ] } } ],
-      "response": []
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete moderator group returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Owner Deletes Closed Group",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_closed_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete closed group returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Owner Deletes Open Group",
+      "request": {
+        "method": "DELETE",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/groups/{{group_open_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('delete open group returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Owner - Logout",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "X-Refresh-Token", "value": "{{owner_refresh_token}}" } ],
+        "url": "{{base_url}}/api/auth/logout"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('logout returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
     }
   ]
 }
