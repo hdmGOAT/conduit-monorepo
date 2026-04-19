@@ -51,7 +51,7 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 	}
 
 	// add creator as admin membership
-	_, err = h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: userID, GroupID: grp.ID, Column3: db.MembershipRoleAdmin})
+	_, err = h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: userID, GroupID: grp.ID, Role: db.MembershipRoleAdmin})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add creator membership"})
 		return
@@ -149,7 +149,7 @@ func (h *GroupsHandler) AddMembership(c *gin.Context) {
 		return
 	}
 
-	m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: req.UserID, GroupID: groupID, Column3: role})
+	m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: req.UserID, GroupID: groupID, Role: role})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add membership"})
 		return
@@ -388,7 +388,7 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 	}
 
 	if grp.IsOpen {
-		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: userID, GroupID: groupID, Column3: db.MembershipRoleMember})
+		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: userID, GroupID: groupID, Role: db.MembershipRoleMember})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add membership"})
 			return
@@ -398,7 +398,7 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 	}
 
 	// create join request
-	jr, err := h.db.CreateJoinRequest(c.Request.Context(), db.CreateJoinRequestParams{UserID: userID, GroupID: groupID, Column3: db.JoinRequestStatusPending})
+	jr, err := h.db.CreateJoinRequest(c.Request.Context(), db.CreateJoinRequestParams{UserID: userID, GroupID: groupID, Status: db.JoinRequestStatusPending})
 	if err != nil {
 		// handle potential race where another request was created concurrently
 		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
@@ -526,16 +526,6 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 		return
 	}
 
-	jr, err := h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{UserID: targetUserID, GroupID: groupID, Column3: status})
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update join request"})
-		return
-	}
-
 	if status == db.JoinRequestStatusApproved {
 		// determine role to grant
 		role := db.MembershipRoleMember
@@ -553,12 +543,34 @@ func (h *GroupsHandler) HandleJoinRequest(c *gin.Context) {
 			return
 		}
 
-		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: jr.UserID, GroupID: jr.GroupID, Column3: role})
+		// create or update membership (idempotent). Only after membership succeeds do we mark the join request approved.
+		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{UserID: targetUserID, GroupID: groupID, Role: role})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add membership"})
 			return
 		}
+
+		_, err = h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{UserID: targetUserID, GroupID: groupID, Status: status})
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update join request"})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{"user_id": m.UserID, "group_id": m.GroupID, "role": m.Role})
+		return
+	}
+
+	jr, err := h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{UserID: targetUserID, GroupID: groupID, Status: status})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "join request not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update join request"})
 		return
 	}
 
@@ -582,6 +594,21 @@ func (h *GroupsHandler) LeaveGroup(c *gin.Context) {
 	groupID, err := strconv.ParseInt(groupIDStr, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	// prevent group owner from leaving their own group
+	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
+		return
+	}
+	if grp.OwnerID == userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "group owner cannot leave the group"})
 		return
 	}
 

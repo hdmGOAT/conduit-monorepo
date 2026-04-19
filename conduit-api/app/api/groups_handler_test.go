@@ -110,7 +110,7 @@ func (f *fakeDB) ListGroupMemberships(ctx context.Context, groupID int64) ([]db.
 }
 func (f *fakeDB) UpdateMembership(ctx context.Context, arg db.UpdateMembershipParams) (db.Membership, error) {
 	// For tests, emulate updating membership by returning the provided args
-	return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3}, nil
+	return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
 }
 func (f *fakeDB) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]db.Group, error) {
 	if f.listGroupsByOwnerFn != nil {
@@ -212,7 +212,7 @@ func TestCreateGroup_Success(t *testing.T) {
 			return db.Group{ID: 123, OwnerID: arg.OwnerID, Name: arg.Name, IsOpen: arg.IsOpen, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3, CreatedAt: pgtype.Timestamptz{}}, nil
+			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 	}
 
@@ -243,7 +243,7 @@ func TestCreateGroup_SetIsOpen(t *testing.T) {
 			return db.Group{ID: 456, OwnerID: arg.OwnerID, Name: arg.Name, IsOpen: arg.IsOpen, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3, CreatedAt: pgtype.Timestamptz{}}, nil
+			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 	}
 
@@ -318,7 +318,7 @@ func TestAddMembership_AdminSuccess(t *testing.T) {
 			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3}, nil
+			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
@@ -390,7 +390,7 @@ func TestRequestToJoin_OpenGroup_Succeeds(t *testing.T) {
 			return nil, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3}, nil
+			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
@@ -430,7 +430,7 @@ func TestHandleJoinRequest_AdminApproves(t *testing.T) {
 			return db.JoinRequest{UserID: arg.UserID, GroupID: arg.GroupID, Status: db.JoinRequestStatusApproved}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Column3}, nil
+			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}

@@ -4,14 +4,26 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: AddMembership :one
+WITH params AS (
+	SELECT $1::bigint AS user_id,
+				 $2::bigint AS group_id,
+				 $3::membership_role AS role
+)
 INSERT INTO memberships (user_id, group_id, role)
-VALUES ($1, $2, $3::membership_role)
+SELECT params.user_id, params.group_id, params.role FROM params
+ON CONFLICT (user_id, group_id) DO UPDATE SET role = EXCLUDED.role
 RETURNING *;
 
 -- name: UpdateMembership :one
+WITH params AS (
+	SELECT $1::bigint AS user_id,
+				 $2::bigint AS group_id,
+				 $3::membership_role AS role
+)
 UPDATE memberships
-SET role = $3::membership_role
-WHERE user_id = $1 AND group_id = $2
+SET role = params.role
+FROM params
+WHERE user_id = params.user_id AND group_id = params.group_id
 RETURNING *;
 
 -- name: ListGroupMemberships :many
@@ -32,8 +44,13 @@ FROM groups
 WHERE id = $1;
 
 -- name: CreateJoinRequest :one
+WITH params AS (
+	SELECT $1::bigint AS user_id,
+				 $2::bigint AS group_id,
+				 $3::join_request_status AS status
+)
 INSERT INTO join_requests (user_id, group_id, status)
-VALUES ($1, $2, $3::join_request_status)
+SELECT params.user_id, params.group_id, params.status FROM params
 RETURNING *;
 
 -- name: ListJoinRequestsByGroup :many
@@ -43,9 +60,15 @@ WHERE group_id = $1
 ORDER BY created_at DESC;
 
 -- name: UpdateJoinRequestStatus :one
+WITH params AS (
+	SELECT $1::bigint AS user_id,
+				 $2::bigint AS group_id,
+				 $3::join_request_status AS status
+)
 UPDATE join_requests
-SET status = $3::join_request_status
-WHERE user_id = $1 AND group_id = $2
+SET status = params.status
+FROM params
+WHERE user_id = params.user_id AND group_id = params.group_id
 RETURNING *;
 
 -- name: UpdateGroupIsOpen :one

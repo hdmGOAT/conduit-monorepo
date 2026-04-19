@@ -18,11 +18,11 @@ RETURNING user_id, group_id, role, created_at
 type AddMembershipParams struct {
 	UserID  int64          `json:"user_id"`
 	GroupID int64          `json:"group_id"`
-	Column3 MembershipRole `json:"column_3"`
+	Role    MembershipRole `json:"role"`
 }
 
 func (q *Queries) AddMembership(ctx context.Context, arg AddMembershipParams) (Membership, error) {
-	row := q.db.QueryRow(ctx, addMembership, arg.UserID, arg.GroupID, arg.Column3)
+	row := q.db.QueryRow(ctx, addMembership, arg.UserID, arg.GroupID, arg.Role)
 	var i Membership
 	err := row.Scan(
 		&i.UserID,
@@ -67,11 +67,11 @@ RETURNING user_id, group_id, status, created_at
 type CreateJoinRequestParams struct {
 	UserID  int64             `json:"user_id"`
 	GroupID int64             `json:"group_id"`
-	Column3 JoinRequestStatus `json:"column_3"`
+	Status  JoinRequestStatus `json:"status"`
 }
 
 func (q *Queries) CreateJoinRequest(ctx context.Context, arg CreateJoinRequestParams) (JoinRequest, error) {
-	row := q.db.QueryRow(ctx, createJoinRequest, arg.UserID, arg.GroupID, arg.Column3)
+	row := q.db.QueryRow(ctx, createJoinRequest, arg.UserID, arg.GroupID, arg.Status)
 	var i JoinRequest
 	err := row.Scan(
 		&i.UserID,
@@ -300,11 +300,11 @@ RETURNING user_id, group_id, status, created_at
 type UpdateJoinRequestStatusParams struct {
 	UserID  int64             `json:"user_id"`
 	GroupID int64             `json:"group_id"`
-	Column3 JoinRequestStatus `json:"column_3"`
+	Status  JoinRequestStatus `json:"status"`
 }
 
 func (q *Queries) UpdateJoinRequestStatus(ctx context.Context, arg UpdateJoinRequestStatusParams) (JoinRequest, error) {
-	row := q.db.QueryRow(ctx, updateJoinRequestStatus, arg.UserID, arg.GroupID, arg.Column3)
+	row := q.db.QueryRow(ctx, updateJoinRequestStatus, arg.UserID, arg.GroupID, arg.Status)
 	var i JoinRequest
 	err := row.Scan(
 		&i.UserID,
@@ -325,11 +325,11 @@ RETURNING user_id, group_id, role, created_at
 type UpdateMembershipParams struct {
 	UserID  int64          `json:"user_id"`
 	GroupID int64          `json:"group_id"`
-	Column3 MembershipRole `json:"column_3"`
+	Role    MembershipRole `json:"role"`
 }
 
 func (q *Queries) UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (Membership, error) {
-	row := q.db.QueryRow(ctx, updateMembership, arg.UserID, arg.GroupID, arg.Column3)
+	row := q.db.QueryRow(ctx, updateMembership, arg.UserID, arg.GroupID, arg.Role)
 	var i Membership
 	err := row.Scan(
 		&i.UserID,
