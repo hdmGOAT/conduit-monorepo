@@ -4,27 +4,23 @@ VALUES ($1, $2, $3)
 RETURNING *;
 
 -- name: AddMembership :one
-WITH params AS (
-	SELECT $1::bigint AS user_id,
-				 $2::bigint AS group_id,
-				 $3::membership_role AS role
+WITH params(user_id, group_id, role) AS (
+	VALUES ($1::bigint, $2::bigint, $3::membership_role)
 )
 INSERT INTO memberships (user_id, group_id, role)
-SELECT params.user_id, params.group_id, params.role FROM params
+SELECT user_id, group_id, role FROM params
 ON CONFLICT (user_id, group_id) DO UPDATE SET role = EXCLUDED.role
-RETURNING *;
+RETURNING user_id, group_id, role, created_at;
 
 -- name: UpdateMembership :one
-WITH params AS (
-	SELECT $1::bigint AS user_id,
-				 $2::bigint AS group_id,
-				 $3::membership_role AS role
+WITH params(user_id, group_id, role) AS (
+	VALUES ($1::bigint, $2::bigint, $3::membership_role)
 )
 UPDATE memberships
 SET role = params.role
 FROM params
 WHERE user_id = params.user_id AND group_id = params.group_id
-RETURNING *;
+RETURNING user_id, group_id, role, created_at;
 
 -- name: ListGroupMemberships :many
 SELECT *
@@ -44,14 +40,12 @@ FROM groups
 WHERE id = $1;
 
 -- name: CreateJoinRequest :one
-WITH params AS (
-	SELECT $1::bigint AS user_id,
-				 $2::bigint AS group_id,
-				 $3::join_request_status AS status
+WITH params(user_id, group_id, status) AS (
+	VALUES ($1::bigint, $2::bigint, $3::join_request_status)
 )
 INSERT INTO join_requests (user_id, group_id, status)
-SELECT params.user_id, params.group_id, params.status FROM params
-RETURNING *;
+SELECT user_id, group_id, status FROM params
+RETURNING user_id, group_id, status, created_at;
 
 -- name: ListJoinRequestsByGroup :many
 SELECT *
@@ -60,16 +54,14 @@ WHERE group_id = $1
 ORDER BY created_at DESC;
 
 -- name: UpdateJoinRequestStatus :one
-WITH params AS (
-	SELECT $1::bigint AS user_id,
-				 $2::bigint AS group_id,
-				 $3::join_request_status AS status
+WITH params(user_id, group_id, status) AS (
+	VALUES ($1::bigint, $2::bigint, $3::join_request_status)
 )
 UPDATE join_requests
 SET status = params.status
 FROM params
 WHERE user_id = params.user_id AND group_id = params.group_id
-RETURNING *;
+RETURNING user_id, group_id, status, created_at;
 
 -- name: UpdateGroupIsOpen :one
 UPDATE groups
