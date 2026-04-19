@@ -110,7 +110,7 @@ func (f *fakeDB) ListGroupMemberships(ctx context.Context, groupID int64) ([]db.
 }
 func (f *fakeDB) UpdateMembership(ctx context.Context, arg db.UpdateMembershipParams) (db.Membership, error) {
 	// For tests, emulate updating membership by returning the provided args
-	return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
+	return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
 }
 func (f *fakeDB) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]db.Group, error) {
 	if f.listGroupsByOwnerFn != nil {
@@ -212,7 +212,7 @@ func TestCreateGroup_Success(t *testing.T) {
 			return db.Group{ID: 123, OwnerID: arg.OwnerID, Name: arg.Name, IsOpen: arg.IsOpen, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role, CreatedAt: pgtype.Timestamptz{}}, nil
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 	}
 
@@ -243,7 +243,7 @@ func TestCreateGroup_SetIsOpen(t *testing.T) {
 			return db.Group{ID: 456, OwnerID: arg.OwnerID, Name: arg.Name, IsOpen: arg.IsOpen, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role, CreatedAt: pgtype.Timestamptz{}}, nil
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
 	}
 
@@ -318,7 +318,7 @@ func TestAddMembership_AdminSuccess(t *testing.T) {
 			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
@@ -390,7 +390,7 @@ func TestRequestToJoin_OpenGroup_Succeeds(t *testing.T) {
 			return nil, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
@@ -410,7 +410,7 @@ func TestRequestToJoin_ClosedGroupCreatesRequest(t *testing.T) {
 			return nil, nil
 		},
 		createJoinRequestFn: func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error) {
-			return db.JoinRequest{UserID: arg.UserID, GroupID: arg.GroupID, Status: db.JoinRequestStatusPending}, nil
+			return db.JoinRequest{UserID: arg.Column1, GroupID: arg.Column2, Status: arg.Column3}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
@@ -427,10 +427,10 @@ func TestHandleJoinRequest_AdminApproves(t *testing.T) {
 			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
 		},
 		updateJoinRequestStatusFn: func(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error) {
-			return db.JoinRequest{UserID: arg.UserID, GroupID: arg.GroupID, Status: db.JoinRequestStatusApproved}, nil
+			return db.JoinRequest{UserID: arg.Column1, GroupID: arg.Column2, Status: arg.Column3}, nil
 		},
 		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
-			return db.Membership{UserID: arg.UserID, GroupID: arg.GroupID, Role: arg.Role}, nil
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
