@@ -19,9 +19,11 @@ type fakeDB struct {
 	updateGroupFn                     func(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error)
 	deleteGroupFn                     func(ctx context.Context, id int64) (db.Group, error)
 	getGroupByIDFn                    func(ctx context.Context, id int64) (db.Group, error)
+	getCollectionFn                   func(ctx context.Context, id int64) (db.Collection, error)
+	closeCollectionFn                 func(ctx context.Context, arg db.CloseCollectionParams) (db.Collection, error)
 	createCollectionFn                func(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error)
 	updateCollectionFn                func(ctx context.Context, arg db.UpdateCollectionParams) (db.Collection, error)
-	deleteCollectionFn                func(ctx context.Context, id int64) (db.Collection, error)
+	deleteCollectionFn                func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error)
 	createCollectionFormFn            func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error)
 	updateCollectionFormFn            func(ctx context.Context, arg db.UpdateCollectionFormParams) (db.CollectionForm, error)
 	deleteCollectionFormFn            func(ctx context.Context, id int64) (db.CollectionForm, error)
@@ -49,7 +51,10 @@ func (f *fakeDB) AddMembership(ctx context.Context, arg db.AddMembershipParams) 
 	}
 	return db.Membership{}, nil
 }
-func (f *fakeDB) CloseCollection(ctx context.Context, id int64) (db.Collection, error) {
+func (f *fakeDB) CloseCollection(ctx context.Context, arg db.CloseCollectionParams) (db.Collection, error) {
+	if f.closeCollectionFn != nil {
+		return f.closeCollectionFn(ctx, arg)
+	}
 	return db.Collection{}, nil
 }
 func (f *fakeDB) ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error) {
@@ -195,6 +200,13 @@ func (f *fakeDB) GetGroupByID(ctx context.Context, id int64) (db.Group, error) {
 	}
 	return db.Group{}, nil
 }
+
+func (f *fakeDB) GetCollection(ctx context.Context, id int64) (db.Collection, error) {
+	if f.getCollectionFn != nil {
+		return f.getCollectionFn(ctx, id)
+	}
+	return db.Collection{}, nil
+}
 func (f *fakeDB) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]db.Payment, error) {
 	return nil, nil
 }
@@ -251,9 +263,9 @@ func (f *fakeDB) UpdateFormSubmission(ctx context.Context, arg db.UpdateFormSubm
 	return db.CollectionFormSubmission{}, nil
 }
 
-func (f *fakeDB) DeleteCollection(ctx context.Context, id int64) (db.Collection, error) {
+func (f *fakeDB) DeleteCollection(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error) {
 	if f.deleteCollectionFn != nil {
-		return f.deleteCollectionFn(ctx, id)
+		return f.deleteCollectionFn(ctx, arg)
 	}
 	return db.Collection{}, nil
 }

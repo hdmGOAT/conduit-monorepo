@@ -14,6 +14,12 @@ import (
 
 func TestCreateCollectionForm_Success(t *testing.T) {
 	fake := &fakeDB{
+		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
+			return db.Collection{ID: id, GroupID: 5}, nil
+		},
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 42}, nil
+		},
 		createCollectionFormFn: func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error) {
 			return db.CollectionForm{ID: 20, CollectionID: arg.CollectionID, Title: arg.Title, Description: arg.Description, IsRequired: arg.IsRequired, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
@@ -34,7 +40,14 @@ func TestCreateCollectionForm_Success(t *testing.T) {
 }
 
 func TestCreateCollectionForm_ValidationError(t *testing.T) {
-	fake := &fakeDB{}
+	fake := &fakeDB{
+		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
+			return db.Collection{ID: id, GroupID: 5}, nil
+		},
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 42}, nil
+		},
+	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
 	router := newTestRouterWithDeps(svc, fake)
 	resp := performAuthJSONRequest(router, http.MethodPost, "/api/collections/10/form", map[string]any{"description": "no title"}, "valid-access")
@@ -45,6 +58,9 @@ func TestCreateCollectionForm_ValidationError(t *testing.T) {
 
 func TestCreateFormSubmission_SuccessAndUnauthorized(t *testing.T) {
 	fake := &fakeDB{
+		getCollectionFormByIDFn: func(ctx context.Context, id int64) (db.CollectionForm, error) {
+			return db.CollectionForm{ID: id, CollectionID: 10}, nil
+		},
 		createFormSubmissionFn: func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error) {
 			return db.CollectionFormSubmission{ID: 30, FormID: arg.FormID, CollectionID: arg.CollectionID, UserID: arg.UserID, SubmittedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}, nil
 		},

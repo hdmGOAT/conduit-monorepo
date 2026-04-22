@@ -14,12 +14,17 @@ import (
 const closeCollection = `-- name: CloseCollection :one
 UPDATE collections
 SET status = 'closed'
-WHERE id = $1
+WHERE id = $1 AND group_id = $2
 RETURNING id, group_id, amount, deadline, status, created_at
 `
 
-func (q *Queries) CloseCollection(ctx context.Context, id int64) (Collection, error) {
-	row := q.db.QueryRow(ctx, closeCollection, id)
+type CloseCollectionParams struct {
+	ID      int64 `json:"id"`
+	GroupID int64 `json:"group_id"`
+}
+
+func (q *Queries) CloseCollection(ctx context.Context, arg CloseCollectionParams) (Collection, error) {
+	row := q.db.QueryRow(ctx, closeCollection, arg.ID, arg.GroupID)
 	var i Collection
 	err := row.Scan(
 		&i.ID,
@@ -60,12 +65,37 @@ func (q *Queries) CreateCollection(ctx context.Context, arg CreateCollectionPara
 
 const deleteCollection = `-- name: DeleteCollection :one
 DELETE FROM collections
-WHERE id = $1
+WHERE id = $1 AND group_id = $2
 RETURNING id, group_id, amount, deadline, status, created_at
 `
 
-func (q *Queries) DeleteCollection(ctx context.Context, id int64) (Collection, error) {
-	row := q.db.QueryRow(ctx, deleteCollection, id)
+type DeleteCollectionParams struct {
+	ID      int64 `json:"id"`
+	GroupID int64 `json:"group_id"`
+}
+
+func (q *Queries) DeleteCollection(ctx context.Context, arg DeleteCollectionParams) (Collection, error) {
+	row := q.db.QueryRow(ctx, deleteCollection, arg.ID, arg.GroupID)
+	var i Collection
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Amount,
+		&i.Deadline,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCollection = `-- name: GetCollection :one
+SELECT id, group_id, amount, deadline, status, created_at
+FROM collections
+WHERE id = $1
+`
+
+func (q *Queries) GetCollection(ctx context.Context, id int64) (Collection, error) {
+	row := q.db.QueryRow(ctx, getCollection, id)
 	var i Collection
 	err := row.Scan(
 		&i.ID,
@@ -115,7 +145,7 @@ func (q *Queries) ListCollectionsByGroup(ctx context.Context, groupID int64) ([]
 const updateCollection = `-- name: UpdateCollection :one
 UPDATE collections
 SET amount = $2, deadline = $3
-WHERE id = $1
+WHERE id = $1 AND group_id = $4
 RETURNING id, group_id, amount, deadline, status, created_at
 `
 
@@ -123,10 +153,16 @@ type UpdateCollectionParams struct {
 	ID       int64              `json:"id"`
 	Amount   int64              `json:"amount"`
 	Deadline pgtype.Timestamptz `json:"deadline"`
+	GroupID  int64              `json:"group_id"`
 }
 
 func (q *Queries) UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (Collection, error) {
-	row := q.db.QueryRow(ctx, updateCollection, arg.ID, arg.Amount, arg.Deadline)
+	row := q.db.QueryRow(ctx, updateCollection,
+		arg.ID,
+		arg.Amount,
+		arg.Deadline,
+		arg.GroupID,
+	)
 	var i Collection
 	err := row.Scan(
 		&i.ID,

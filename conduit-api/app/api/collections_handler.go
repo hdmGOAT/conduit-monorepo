@@ -180,18 +180,13 @@ func (h *CollectionsHandler) CloseCollection(c *gin.Context) {
 		return
 	}
 
-	coll, err := h.db.CloseCollection(c.Request.Context(), collID)
+	coll, err := h.db.CloseCollection(c.Request.Context(), db.CloseCollectionParams{ID: collID, GroupID: groupID})
 	if err != nil {
 		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
 			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to close collection"})
-		return
-	}
-
-	if coll.GroupID != groupID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "collection does not belong to group"})
 		return
 	}
 
@@ -259,13 +254,13 @@ func (h *CollectionsHandler) UpdateCollection(c *gin.Context) {
 		return
 	}
 
-	coll, err := h.db.UpdateCollection(c.Request.Context(), db.UpdateCollectionParams{ID: collID, Amount: req.Amount, Deadline: pgtype.Timestamptz{Time: t, Valid: true}})
+	coll, err := h.db.UpdateCollection(c.Request.Context(), db.UpdateCollectionParams{ID: collID, Amount: req.Amount, Deadline: pgtype.Timestamptz{Time: t, Valid: true}, GroupID: groupID})
 	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update collection"})
-		return
-	}
-	if coll.GroupID != groupID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "collection does not belong to group"})
 		return
 	}
 	out := gin.H{"id": coll.ID, "group_id": coll.GroupID, "amount": coll.Amount, "status": coll.Status}
@@ -319,13 +314,13 @@ func (h *CollectionsHandler) DeleteCollection(c *gin.Context) {
 		return
 	}
 
-	coll, err := h.db.DeleteCollection(c.Request.Context(), collID)
+	coll, err := h.db.DeleteCollection(c.Request.Context(), db.DeleteCollectionParams{ID: collID, GroupID: groupID})
 	if err != nil {
+		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete collection"})
-		return
-	}
-	if coll.GroupID != groupID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "collection does not belong to group"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"id": coll.ID})

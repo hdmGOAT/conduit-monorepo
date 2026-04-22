@@ -96,8 +96,8 @@ func TestDeleteCollection_AdminSuccess(t *testing.T) {
 		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
 			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
 		},
-		deleteCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5}, nil
+		deleteCollectionFn: func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error) {
+			return db.Collection{ID: arg.ID, GroupID: arg.GroupID}, nil
 		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
