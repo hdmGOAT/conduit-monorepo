@@ -1,0 +1,91 @@
+{
+  "info": {
+    "_postman_id": "9a8b7c6d-5e4f-4321-9abc-1234567890ab",
+    "name": "Conduit API - Collections & Forms",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection for Collections & Forms endpoints (implemented and planned). Some planned endpoints may not be implemented yet; adjust paths if needed."
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "owner_access_token", "value": "", "type": "string" },
+    { "key": "group_id", "value": "", "type": "string" },
+    { "key": "collection_id", "value": "", "type": "string" },
+    { "key": "form_id", "value": "", "type": "string" },
+    { "key": "field_id", "value": "", "type": "string" },
+    { "key": "submission_id", "value": "", "type": "string" },
+    { "key": "answer_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Create Collection (owner/admin)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{owner_access_token}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"amount\": 1000,\n  \"deadline\": \"2026-12-31T23:59:59Z\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/collections", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "collections" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "if (pm.response.code === 200) {", "  var json = pm.response.json();", "  pm.environment.set('collection_id', json.id);", "} else {", "  console.log('create collection returned', pm.response.code);", "  if (pm.response.code === 403) {", "    pm.sendRequest({", "      url: pm.environment.get('base_url') + '/api/groups/' + pm.environment.get('group_id') + '/memberships',", "      method: 'GET',", "      header: { 'Authorization': 'Bearer ' + pm.environment.get('owner_access_token') }", "    }, function(err, res) {", "      if (err) {", "        console.log('membership fetch error', err);", "        return;", "      }", "      try {", "        console.log('memberships for group', pm.environment.get('group_id'), ':', res.json());", "      } catch (e) {", "        console.log('failed parsing memberships', e);", "      }", "    });", "  }", "}" ] } } ],
+      "response": []
+    },
+    {
+      "name": "List Collections (by group)",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/collections", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "collections" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list collections returns 200', function(){pm.response.to.have.status(200);});", "var arr = pm.response.json();", "if (arr.length && !pm.environment.get('collection_id')) { pm.environment.set('collection_id', arr[0].id); }" ] } } ],
+      "response": []
+    },
+    {
+      "name": "Close Collection (owner/admin)",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": { "raw": "{{base_url}}/api/groups/{{group_id}}/collections/{{collection_id}}/close", "host": [ "{{base_url}}" ], "path": [ "api", "groups", "{{group_id}}", "collections", "{{collection_id}}", "close" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('close collection returns 200', function(){pm.response.to.have.status(200);});" ] } } ],
+      "response": []
+    },
+
+    {
+      "name": "(Planned) Create Collection Form",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"collection_id\": {{collection_id}},\n  \"title\": \"Signup Form\",\n  \"description\": \"Form for collection\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/collections/{{collection_id}}/form", "host": [ "{{base_url}}" ], "path": [ "api", "collections", "{{collection_id}}", "form" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "// Planned endpoint: may not be implemented", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('form_id', json.id); }" ] } } ],
+      "response": []
+    },
+
+    {
+      "name": "(Planned) Create Form Field",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"form_id\": {{form_id}},\n  \"label\": \"Name\",\n  \"field_key\": \"name\",\n  \"field_type\": \"text\",\n  \"sort_order\": 1\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/forms/{{form_id}}/fields", "host": [ "{{base_url}}" ], "path": [ "api", "forms", "{{form_id}}", "fields" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "// Planned endpoint: may not be implemented", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('field_id', json.id); }" ] } } ],
+      "response": []
+    },
+
+    {
+      "name": "(Planned) Submit Form (create submission + answers)",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\n  \"form_id\": {{form_id}},\n  \"collection_id\": {{collection_id}},\n  \"answers\": [{ \"field_id\": {{field_id}}, \"value_text\": \"Alice\" }]\n}", "options": { "raw": { "language": "json" } } },
+        "url": { "raw": "{{base_url}}/api/forms/{{form_id}}/submissions", "host": [ "{{base_url}}" ], "path": [ "api", "forms", "{{form_id}}", "submissions" ] }
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "// Planned endpoint: may not be implemented", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('submission_id', json.id); }" ] } } ],
+      "response": []
+    }
+
+  ]
+}

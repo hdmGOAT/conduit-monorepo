@@ -16,7 +16,9 @@ func main() {
 	authService := &auth.Service{}
 	authHandler := api.NewAuthHandler(authService, false, 0)
 	groupsHandler := api.NewGroupsHandler(nil)
-	router := api.NewRouter(authHandler, groupsHandler, authService)
+	collectionsHandler := api.NewCollectionsHandler(nil)
+	formsHandler := api.NewFormsHandler(nil)
+	router := api.NewRouter(authHandler, groupsHandler, collectionsHandler, formsHandler, authService)
 
 	routes := router.Routes()
 	sort.Slice(routes, func(i, j int) bool {
