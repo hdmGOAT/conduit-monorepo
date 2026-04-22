@@ -414,8 +414,9 @@ func newTestRouter(service AuthService) *gin.Engine {
 	handler := NewAuthHandler(service, false, 3600)
 	groupsHandler := NewGroupsHandler(nil)
 	collectionsHandler := NewCollectionsHandler(nil)
+	paymentsHandler := NewPaymentsHandler(nil)
 	formsHandler := NewFormsHandler(nil)
-	return NewRouter(handler, groupsHandler, collectionsHandler, formsHandler, service)
+	return NewRouter(handler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, service)
 }
 
 func performJSONRequest(router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {
