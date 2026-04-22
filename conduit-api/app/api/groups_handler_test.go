@@ -21,8 +21,9 @@ func newTestRouterWithDeps(service AuthService, dbq db.Querier) *gin.Engine {
 	handler := NewAuthHandler(service, false, 3600)
 	groupsHandler := NewGroupsHandler(dbq)
 	collectionsHandler := NewCollectionsHandler(dbq)
+	paymentsHandler := NewPaymentsHandler(dbq)
 	formsHandler := NewFormsHandler(dbq)
-	return NewRouter(handler, groupsHandler, collectionsHandler, formsHandler, service)
+	return NewRouter(handler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, service)
 }
 
 func performAuthJSONRequest(router *gin.Engine, method, path string, body any, token string) *httptest.ResponseRecorder {

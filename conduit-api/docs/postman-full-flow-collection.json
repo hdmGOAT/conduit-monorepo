@@ -3,7 +3,7 @@
     "_postman_id": "f2d7c9f2-6b3a-4c2a-a2f1-abcdef123456",
     "name": "Conduit API - Full Flow",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Automated end-to-end flow covering auth, group lifecycle, join requests, collections, forms, submissions, answers, and cleanup."
+    "description": "Automated end-to-end flow covering auth, group lifecycle, join requests, collections, payments, forms, submissions, answers, and cleanup."
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
@@ -35,6 +35,8 @@
     { "key": "group_open_id", "value": "", "type": "string" },
     { "key": "group_moderator_id", "value": "", "type": "string" },
     { "key": "collection_id", "value": "", "type": "string" },
+    { "key": "member_payment_id", "value": "", "type": "string" },
+    { "key": "owner_payment_id", "value": "", "type": "string" },
     { "key": "form_id", "value": "", "type": "string" },
     { "key": "field_id", "value": "", "type": "string" },
     { "key": "secondary_field_id", "value": "", "type": "string" },
@@ -371,6 +373,45 @@
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update collection returns 200', function(){pm.response.to.have.status(200);});", "pm.test('collection updated', function(){ var json = pm.response.json(); pm.expect(json.amount).to.eql(2000); });" ] } } ]
     },
     {
+      "name": "Member Creates Payment",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"method\":\"cash\"}" },
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('member payment returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('member_payment_id', json.id); }", "pm.test('member payment is pending cash', function(){ var json = pm.response.json(); pm.expect(json.status).to.eql('pending'); pm.expect(json.method).to.eql('cash'); });" ] } } ]
+    },
+    {
+      "name": "Owner Creates Payment",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"method\":\"stripe\"}" },
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('owner payment returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('owner_payment_id', json.id); }", "pm.test('owner payment is pending stripe', function(){ var json = pm.response.json(); pm.expect(json.status).to.eql('pending'); pm.expect(json.method).to.eql('stripe'); });" ] } } ]
+    },
+    {
+      "name": "List Payments by Collection",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var ownerPaymentId = String(pm.environment.get('owner_payment_id')); var memberPaymentId = String(pm.environment.get('member_payment_id')); pm.test('two payments exist in reverse chronological order', function(){ pm.expect(payments.length).to.eql(2); pm.expect(String(payments[0].id)).to.eql(ownerPaymentId); pm.expect(String(payments[1].id)).to.eql(memberPaymentId); });", "pm.test('payments are most recent first', function(){ pm.expect(payments[0].method).to.eql('stripe'); pm.expect(payments[1].method).to.eql('cash'); });" ] } } ]
+    },
+    {
+      "name": "Victim Cannot Create Payment",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{victim_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"method\":\"cash\"}" },
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('victim payment is forbidden', function(){pm.response.to.have.status(403);});" ] } } ]
+    },
+    {
       "name": "Create Collection Form",
       "request": {
         "method": "POST",
@@ -548,6 +589,16 @@
         "url": "{{base_url}}/api/groups/{{group_open_id}}/collections/{{collection_id}}/close"
       },
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('close collection returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
+      "name": "Member Cannot Create Payment On Closed Collection",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{member_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"method\":\"stripe\"}" },
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('closed collection rejects new payments', function(){pm.response.to.have.status(409);});" ] } } ]
     },
     {
       "name": "Delete Submission",

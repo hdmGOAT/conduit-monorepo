@@ -24,6 +24,7 @@ type fakeDB struct {
 	createCollectionFn                func(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error)
 	updateCollectionFn                func(ctx context.Context, arg db.UpdateCollectionParams) (db.Collection, error)
 	deleteCollectionFn                func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error)
+	createPaymentFn                   func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error)
 	createCollectionFormFn            func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error)
 	updateCollectionFormFn            func(ctx context.Context, arg db.UpdateCollectionFormParams) (db.CollectionForm, error)
 	deleteCollectionFormFn            func(ctx context.Context, id int64) (db.CollectionForm, error)
@@ -33,6 +34,7 @@ type fakeDB struct {
 	createCollectionFormFieldFn       func(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error)
 	createFormSubmissionFn            func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error)
 	addFormAnswerFn                   func(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error)
+	listPaymentsByCollectionFn        func(ctx context.Context, collectionID int64) ([]db.Payment, error)
 	listFormSubmissionsByCollectionFn func(ctx context.Context, collectionID int64) ([]db.CollectionFormSubmission, error)
 	getFormSubmissionByIDFn           func(ctx context.Context, id int64) (db.CollectionFormSubmission, error)
 	updateFormSubmissionFn            func(ctx context.Context, arg db.UpdateFormSubmissionParams) (db.CollectionFormSubmission, error)
@@ -94,6 +96,9 @@ func (f *fakeDB) CreatePasswordResetToken(ctx context.Context, arg db.CreatePass
 	return db.PasswordResetToken{}, nil
 }
 func (f *fakeDB) CreatePayment(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error) {
+	if f.createPaymentFn != nil {
+		return f.createPaymentFn(ctx, arg)
+	}
 	return db.Payment{}, nil
 }
 func (f *fakeDB) CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error) {
@@ -208,6 +213,9 @@ func (f *fakeDB) GetCollection(ctx context.Context, id int64) (db.Collection, er
 	return db.Collection{}, nil
 }
 func (f *fakeDB) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]db.Payment, error) {
+	if f.listPaymentsByCollectionFn != nil {
+		return f.listPaymentsByCollectionFn(ctx, collectionID)
+	}
 	return nil, nil
 }
 func (f *fakeDB) ListUsers(ctx context.Context, arg db.ListUsersParams) ([]db.User, error) {

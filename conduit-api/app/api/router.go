@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectionsHandler *CollectionsHandler, formsHandler *FormsHandler, authService middleware.AccessTokenParser) *gin.Engine {
+func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectionsHandler *CollectionsHandler, paymentsHandler *PaymentsHandler, formsHandler *FormsHandler, authService middleware.AccessTokenParser) *gin.Engine {
 	router := gin.Default()
 
 	api := router.Group("/api")
@@ -47,6 +47,10 @@ func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectio
 	groups.PATCH(":group_id/collections/:collection_id/close", middleware.RequireAuth(authService), collectionsHandler.CloseCollection)
 	groups.PATCH(":group_id/collections/:collection_id", middleware.RequireAuth(authService), collectionsHandler.UpdateCollection)
 	groups.DELETE(":group_id/collections/:collection_id", middleware.RequireAuth(authService), collectionsHandler.DeleteCollection)
+
+	// Payments routes (per-collection)
+	api.POST("/collections/:collection_id/payments", middleware.RequireAuth(authService), paymentsHandler.CreatePayment)
+	api.GET("/collections/:collection_id/payments", middleware.RequireAuth(authService), paymentsHandler.ListPaymentsByCollection)
 
 	// Forms & submissions
 	api.POST("/collections/:collection_id/form", middleware.RequireAuth(authService), formsHandler.CreateCollectionForm)
