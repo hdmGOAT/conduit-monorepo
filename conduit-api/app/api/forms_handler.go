@@ -73,6 +73,20 @@ func (h *FormsHandler) canManageCollection(ctx context.Context, callerID, collec
 	return role == db.MembershipRoleAdmin, nil
 }
 
+func (h *FormsHandler) canAccessCollection(ctx context.Context, callerID, collectionID int64) (bool, error) {
+	collection, err := h.db.GetCollection(ctx, collectionID)
+	if err != nil {
+		return false, err
+	}
+
+	_, role, err := resolveGroupAccess(ctx, h.db, callerID, collection.GroupID)
+	if err != nil {
+		return false, err
+	}
+
+	return role != "", nil
+}
+
 func (h *FormsHandler) canManageSubmission(ctx context.Context, callerID int64, sub db.CollectionFormSubmission) (bool, error) {
 	if sub.UserID == callerID {
 		return true, nil
@@ -138,10 +152,29 @@ func (h *FormsHandler) CreateCollectionForm(c *gin.Context) {
 
 // GetCollectionForm returns a form and its fields by collection id
 func (h *FormsHandler) GetCollectionForm(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
 	collectionIDStr := c.Param("collection_id")
 	collectionID, err := strconv.ParseInt(collectionIDStr, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid collection id"})
+		return
+	}
+
+	canAccess, err := h.canAccessCollection(c.Request.Context(), callerID, collectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 
@@ -177,6 +210,11 @@ func (h *FormsHandler) GetCollectionForm(c *gin.Context) {
 
 // GetCollectionFormByID returns a form by id
 func (h *FormsHandler) GetCollectionFormByID(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
 	formIDStr := c.Param("form_id")
 	formID, err := strconv.ParseInt(formIDStr, 10, 64)
 	if err != nil {
@@ -192,6 +230,21 @@ func (h *FormsHandler) GetCollectionFormByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form"})
 		return
 	}
+
+	canAccess, err := h.canAccessCollection(c.Request.Context(), callerID, form.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
 	fields, err := h.db.ListCollectionFormFields(c.Request.Context(), form.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list form fields"})
@@ -366,11 +419,11 @@ func (h *FormsHandler) CreateCollectionFormField(c *gin.Context) {
 	var req struct {
 		FieldKey    string      `json:"field_key" binding:"required"`
 		Label       string      `json:"label" binding:"required"`
-		FieldType   string      `json:"field_type" binding:"required"`
+		FieldType   string      `json:"field_type" binding:"required,oneof=text textarea number date select checkbox email phone"`
 		Placeholder string      `json:"placeholder"`
 		IsRequired  bool        `json:"is_required"`
 		Options     interface{} `json:"options"`
-		SortOrder   int32       `json:"sort_order"`
+		SortOrder   int32       `json:"sort_order" binding:"required,gt=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
@@ -395,12 +448,42 @@ func (h *FormsHandler) CreateCollectionFormField(c *gin.Context) {
 
 // ListCollectionFormFields lists fields for a form
 func (h *FormsHandler) ListCollectionFormFields(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
 	formIDStr := c.Param("form_id")
 	formID, err := strconv.ParseInt(formIDStr, 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form id"})
 		return
 	}
+
+	form, err := h.db.GetCollectionFormByID(c.Request.Context(), formID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form"})
+		return
+	}
+
+	canAccess, err := h.canAccessCollection(c.Request.Context(), callerID, form.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
 	fields, err := h.db.ListCollectionFormFields(c.Request.Context(), formID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list fields"})
@@ -451,6 +534,20 @@ func (h *FormsHandler) CreateFormSubmission(c *gin.Context) {
 
 	if req.CollectionID != form.CollectionID {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "collection_id does not match form"})
+		return
+	}
+
+	canAccess, err := h.canAccessCollection(c.Request.Context(), userID, req.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canAccess {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 

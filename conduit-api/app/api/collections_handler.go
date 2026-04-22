@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"conduit-monorepo/conduit-api/internal/db"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -63,7 +61,7 @@ func (h *CollectionsHandler) CreateCollection(c *gin.Context) {
 
 	canManage, err := h.canManageGroup(c.Request.Context(), callerID, groupID)
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 			return
 		}
@@ -168,7 +166,7 @@ func (h *CollectionsHandler) CloseCollection(c *gin.Context) {
 
 	canManage, err := h.canManageGroup(c.Request.Context(), callerID, groupID)
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 			return
 		}
@@ -182,7 +180,7 @@ func (h *CollectionsHandler) CloseCollection(c *gin.Context) {
 
 	coll, err := h.db.CloseCollection(c.Request.Context(), db.CloseCollectionParams{ID: collID, GroupID: groupID})
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
 			return
 		}
@@ -230,7 +228,7 @@ func (h *CollectionsHandler) UpdateCollection(c *gin.Context) {
 
 	canManage, err := h.canManageGroup(c.Request.Context(), callerID, groupID)
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 			return
 		}
@@ -256,7 +254,7 @@ func (h *CollectionsHandler) UpdateCollection(c *gin.Context) {
 
 	coll, err := h.db.UpdateCollection(c.Request.Context(), db.UpdateCollectionParams{ID: collID, Amount: req.Amount, Deadline: pgtype.Timestamptz{Time: t, Valid: true}, GroupID: groupID})
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
 			return
 		}
@@ -302,7 +300,7 @@ func (h *CollectionsHandler) DeleteCollection(c *gin.Context) {
 
 	canManage, err := h.canManageGroup(c.Request.Context(), callerID, groupID)
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
 			return
 		}
@@ -316,7 +314,7 @@ func (h *CollectionsHandler) DeleteCollection(c *gin.Context) {
 
 	coll, err := h.db.DeleteCollection(c.Request.Context(), db.DeleteCollectionParams{ID: collID, GroupID: groupID})
 	if err != nil {
-		if err == sql.ErrNoRows || err == pgx.ErrNoRows {
+		if isNoRowsErr(err) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
 			return
 		}
