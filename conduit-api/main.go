@@ -37,7 +37,8 @@ func main() {
 	authHandler := api.NewAuthHandler(authService, cfg.CookieSecure, tokenManager.RefreshTTLSeconds())
 	groupsHandler := api.NewGroupsHandler(queries)
 	collectionsHandler := api.NewCollectionsHandler(queries)
-	paymentsHandler := api.NewPaymentsHandler(queries)
+	stripeGateway := api.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeCurrency)
+	paymentsHandler := api.NewPaymentsHandler(queries, stripeGateway)
 	formsHandler := api.NewFormsHandler(queries)
 	router := api.NewRouter(authHandler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, authService)
 

@@ -16,12 +16,12 @@ import (
 )
 
 // use the centralized fake in fake_db_test.go
-func newTestRouterWithDeps(service AuthService, dbq db.Querier) *gin.Engine {
+func newTestRouterWithDeps(service AuthService, dbq db.Querier, stripeGateway ...stripeGateway) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
 	groupsHandler := NewGroupsHandler(dbq)
 	collectionsHandler := NewCollectionsHandler(dbq)
-	paymentsHandler := NewPaymentsHandler(dbq)
+	paymentsHandler := NewPaymentsHandler(dbq, stripeGateway...)
 	formsHandler := NewFormsHandler(dbq)
 	return NewRouter(handler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, service)
 }

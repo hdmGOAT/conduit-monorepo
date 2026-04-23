@@ -36,6 +36,7 @@ type Querier interface {
 	GetFormAnswerByID(ctx context.Context, id int64) (CollectionFormAnswer, error)
 	GetFormSubmissionByID(ctx context.Context, id int64) (CollectionFormSubmission, error)
 	GetGroupByID(ctx context.Context, id int64) (Group, error)
+	GetPaymentByStripePaymentIntentID(ctx context.Context, stripePaymentIntentID string) (Payment, error)
 	GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (RefreshToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)

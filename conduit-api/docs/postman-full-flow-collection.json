@@ -3,7 +3,7 @@
     "_postman_id": "f2d7c9f2-6b3a-4c2a-a2f1-abcdef123456",
     "name": "Conduit API - Full Flow",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Automated end-to-end flow covering auth, group lifecycle, join requests, collections, payments, forms, submissions, answers, and cleanup."
+    "description": "Automated end-to-end flow covering auth, group lifecycle, join requests, collections, payments, Stripe live verification, forms, submissions, answers, and cleanup."
   },
   "variable": [
     { "key": "base_url", "value": "http://localhost:8080", "type": "string" },
@@ -37,6 +37,9 @@
     { "key": "collection_id", "value": "", "type": "string" },
     { "key": "member_payment_id", "value": "", "type": "string" },
     { "key": "owner_payment_id", "value": "", "type": "string" },
+    { "key": "owner_payment_stripe_intent_id", "value": "", "type": "string" },
+    { "key": "stripe_webhook_secret", "value": "whsec_test_change_me", "type": "string" },
+    { "key": "stripe_api_version", "value": "2026-02-25.clover", "type": "string" },
     { "key": "form_id", "value": "", "type": "string" },
     { "key": "field_id", "value": "", "type": "string" },
     { "key": "secondary_field_id", "value": "", "type": "string" },
@@ -390,7 +393,7 @@
         "body": { "mode": "raw", "raw": "{\"method\":\"stripe\"}" },
         "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('owner payment returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('owner_payment_id', json.id); }", "pm.test('owner payment is pending stripe', function(){ var json = pm.response.json(); pm.expect(json.status).to.eql('pending'); pm.expect(json.method).to.eql('stripe'); });" ] } } ]
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('owner payment returns 200', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); var stripeIntent = json.stripe_payment_intent || {}; pm.environment.set('owner_payment_id', json.id); pm.environment.set('owner_payment_stripe_intent_id', stripeIntent.id || json.stripe_payment_intent_id || ''); pm.test('owner payment includes stripe payment intent details', function(){ pm.expect(stripeIntent.id || json.stripe_payment_intent_id).to.eql(json.stripe_payment_intent_id); pm.expect(stripeIntent.client_secret).to.be.a('string'); }); pm.test('owner payment is pending stripe', function(){ pm.expect(json.status).to.eql('pending'); pm.expect(json.method).to.eql('stripe'); }); }" ] } } ]
     },
     {
       "name": "List Payments by Collection",
@@ -399,7 +402,29 @@
         "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
         "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var ownerPaymentId = String(pm.environment.get('owner_payment_id')); var memberPaymentId = String(pm.environment.get('member_payment_id')); pm.test('two payments exist in reverse chronological order', function(){ pm.expect(payments.length).to.eql(2); pm.expect(String(payments[0].id)).to.eql(ownerPaymentId); pm.expect(String(payments[1].id)).to.eql(memberPaymentId); });", "pm.test('payments are most recent first', function(){ pm.expect(payments[0].method).to.eql('stripe'); pm.expect(payments[1].method).to.eql('cash'); });" ] } } ]
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var ownerPaymentId = String(pm.environment.get('owner_payment_id')); var memberPaymentId = String(pm.environment.get('member_payment_id')); var ownerPayment = payments.find(function(payment){ return String(payment.id) === ownerPaymentId; }); var memberPayment = payments.find(function(payment){ return String(payment.id) === memberPaymentId; });", "pm.test('two payments exist in reverse chronological order', function(){ pm.expect(payments.length).to.eql(2); pm.expect(String(payments[0].id)).to.eql(ownerPaymentId); pm.expect(String(payments[1].id)).to.eql(memberPaymentId); });", "pm.test('stripe payment is pending before webhook', function(){ pm.expect(ownerPayment).to.exist; pm.expect(ownerPayment.status).to.eql('pending'); pm.expect(ownerPayment.method).to.eql('stripe'); pm.expect(String(ownerPayment.stripe_payment_intent_id)).to.eql(String(pm.environment.get('owner_payment_stripe_intent_id'))); });", "pm.test('cash payment remains pending', function(){ pm.expect(memberPayment).to.exist; pm.expect(memberPayment.status).to.eql('pending'); pm.expect(memberPayment.method).to.eql('cash'); });" ] } } ]
+    },
+    {
+      "name": "Stripe Webhook - Owner Payment Succeeded",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Stripe-Signature", "value": "{{stripe_webhook_signature}}" } ],
+        "body": { "mode": "raw", "raw": "{{stripe_webhook_payload}}" },
+        "url": "{{base_url}}/api/webhooks/stripe"
+      },
+      "event": [
+        { "listen": "prerequest", "script": { "type": "text/javascript", "exec": [ "var secret = pm.environment.get('stripe_webhook_secret');", "if (!secret) { throw new Error('stripe_webhook_secret is required and must match the backend STRIPE_WEBHOOK_SECRET'); }", "var paymentIntentId = pm.environment.get('owner_payment_stripe_intent_id');", "if (!paymentIntentId) { throw new Error('owner_payment_stripe_intent_id is missing'); }", "var timestamp = Math.floor(Date.now() / 1000);", "var apiVersion = pm.environment.get('stripe_api_version') || '2026-02-25.clover';", "var payload = JSON.stringify({ id: 'evt_test_owner_payment_succeeded', object: 'event', api_version: apiVersion, created: timestamp, livemode: false, type: 'payment_intent.succeeded', data: { object: { id: paymentIntentId, object: 'payment_intent' } } });", "var signature = CryptoJS.HmacSHA256(timestamp + '.' + payload, secret).toString(CryptoJS.enc.Hex);", "pm.environment.set('stripe_webhook_payload', payload);", "pm.environment.set('stripe_webhook_signature', 't=' + timestamp + ',v1=' + signature);" ] } },
+        { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('webhook returns 200', function(){pm.response.to.have.status(200);});" ] } }
+      ]
+    },
+    {
+      "name": "List Payments After Stripe Webhook",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var ownerPaymentId = String(pm.environment.get('owner_payment_id')); var ownerIntentId = String(pm.environment.get('owner_payment_stripe_intent_id')); var ownerPayment = payments.find(function(payment){ return String(payment.id) === ownerPaymentId; }); var cashPayment = payments.find(function(payment){ return payment.method === 'cash'; });", "pm.test('payment list still has two rows', function(){ pm.expect(payments.length).to.eql(2); pm.expect(String(payments[0].id)).to.eql(ownerPaymentId); });", "pm.test('owner payment marked paid in db', function(){ pm.expect(ownerPayment).to.exist; pm.expect(ownerPayment.status).to.eql('paid'); pm.expect(ownerPayment.method).to.eql('stripe'); pm.expect(String(ownerPayment.stripe_payment_intent_id)).to.eql(ownerIntentId); });", "pm.test('cash payment remains pending', function(){ pm.expect(cashPayment).to.exist; pm.expect(cashPayment.status).to.eql('pending'); });" ] } } ]
     },
     {
       "name": "Victim Cannot Create Payment",
