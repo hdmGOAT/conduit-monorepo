@@ -6,7 +6,7 @@ Monorepo containing:
 
 ## Run in development
 
-Environment variables are loaded from `.env` for local development.
+Environment variables are loaded from `.env` for local development. See `.env.example` for the committed template.
 
 Add these values:
 
@@ -36,6 +36,16 @@ Run individually:
 make dev-api
 make dev-frontend
 ```
+
+## Environment example
+
+Copy the template and fill in your local values:
+
+```bash
+cp .env.example .env
+```
+
+The template includes backend, frontend, and Stripe values used by local development.
 
 ## Quality checks
 
