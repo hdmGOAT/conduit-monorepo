@@ -20,6 +20,7 @@ import (
 
 func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testing.T) {
 	called := false
+	cashCalled := false
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
 			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
@@ -37,6 +38,13 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 			}
 			return db.Payment{ID: 88, UserID: arg.UserID, CollectionID: arg.CollectionID, BaseAmount: arg.BaseAmount, FeeAmount: arg.FeeAmount, TotalAmount: arg.TotalAmount, Status: db.PaymentStatusPending, Method: arg.Column6, StripePaymentIntentID: arg.StripePaymentIntentID, CreatedAt: pgtype.Timestamptz{}}, nil
 		},
+		createCashPaymentFn: func(ctx context.Context, paymentID int64) (db.CashPayment, error) {
+			cashCalled = true
+			if paymentID != 88 {
+				t.Fatalf("expected cash payment to be linked to payment 88, got %d", paymentID)
+			}
+			return db.CashPayment{ID: 7, PaymentID: paymentID, Status: db.CashPaymentStatusPending}, nil
+		},
 	}
 	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) {
 		if accessToken == "valid-access" {
@@ -52,6 +60,9 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 	}
 	if !called {
 		t.Fatal("expected create payment to be called")
+	}
+	if !cashCalled {
+		t.Fatal("expected create cash payment to be called")
 	}
 
 	var out map[string]any
@@ -489,6 +500,137 @@ func TestCreatePayment_ForbiddenForNonMember(t *testing.T) {
 	resp := performAuthJSONRequest(router, http.MethodPost, "/api/collections/10/payments", map[string]any{"method": "cash"}, "valid-access")
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestConfirmCashPayment_CollectorCanConfirmPendingCashPayment(t *testing.T) {
+	marked := false
+	confirmed := false
+	fake := &fakeDB{
+		getPaymentByIDFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
+		},
+		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
+			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+		},
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 99}, nil
+		},
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleCollector}}, nil
+		},
+		markPaymentPaidFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			marked = true
+			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPaid, Method: db.PaymentMethodCash}, nil
+		},
+		confirmCashPaymentFn: func(ctx context.Context, arg db.ConfirmCashPaymentParams) (db.CashPayment, error) {
+			confirmed = true
+			if arg.PaymentID != 88 || arg.ConfirmedBy != 42 {
+				t.Fatalf("unexpected confirm args: %#v", arg)
+			}
+			return db.CashPayment{
+				ID:          55,
+				PaymentID:   arg.PaymentID,
+				Status:      db.CashPaymentStatusConfirmed,
+				ConfirmedBy: pgtype.Int8{Int64: arg.ConfirmedBy, Valid: true},
+				ConfirmedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+			}, nil
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) {
+		if accessToken == "collector-access" {
+			return 42, nil
+		}
+		return 0, errors.New("bad token")
+	}}
+
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/payments/88/cash/confirm", nil, "collector-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !marked || !confirmed {
+		t.Fatalf("expected mark and confirm to be called, got marked=%v confirmed=%v", marked, confirmed)
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	payment, ok := out["payment"].(map[string]any)
+	if !ok || payment["status"] != string(db.PaymentStatusPaid) {
+		t.Fatalf("expected paid payment response, got %v", out["payment"])
+	}
+	cashPayment, ok := out["cash_payment"].(map[string]any)
+	if !ok || cashPayment["status"] != string(db.CashPaymentStatusConfirmed) || int64(cashPayment["confirmed_by"].(float64)) != 42 {
+		t.Fatalf("expected confirmed cash payment response, got %v", out["cash_payment"])
+	}
+}
+
+func TestConfirmCashPayment_DuplicateConfirmationRejected(t *testing.T) {
+	fake := &fakeDB{
+		getPaymentByIDFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
+		},
+		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
+			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+		},
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 99}, nil
+		},
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleCollector}}, nil
+		},
+		markPaymentPaidFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			return db.Payment{}, sql.ErrNoRows
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/payments/88/cash/confirm", nil, "collector-access")
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestConfirmCashPayment_NonCollectorForbidden(t *testing.T) {
+	markCalled := false
+	confirmCalled := false
+	fake := &fakeDB{
+		getPaymentByIDFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
+		},
+		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
+			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+		},
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 99}, nil
+		},
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleMember}}, nil
+		},
+		markPaymentPaidFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			markCalled = true
+			return db.Payment{ID: id}, nil
+		},
+		confirmCashPaymentFn: func(ctx context.Context, arg db.ConfirmCashPaymentParams) (db.CashPayment, error) {
+			confirmCalled = true
+			return db.CashPayment{PaymentID: arg.PaymentID}, nil
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/payments/88/cash/confirm", nil, "member-access")
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if markCalled || confirmCalled {
+		t.Fatalf("expected no state transition for forbidden caller, got mark=%v confirm=%v", markCalled, confirmCalled)
 	}
 }
 

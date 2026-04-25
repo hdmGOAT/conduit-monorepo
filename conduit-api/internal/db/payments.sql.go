@@ -11,6 +11,55 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const confirmCashPayment = `-- name: ConfirmCashPayment :one
+UPDATE cash_payments
+SET status = 'confirmed',
+	confirmed_by = $1::bigint,
+	confirmed_at = NOW()
+WHERE payment_id = $2
+	AND status = 'pending'
+RETURNING id, payment_id, status, confirmed_by, created_at, confirmed_at
+`
+
+type ConfirmCashPaymentParams struct {
+	ConfirmedBy int64 `json:"confirmed_by"`
+	PaymentID   int64 `json:"payment_id"`
+}
+
+func (q *Queries) ConfirmCashPayment(ctx context.Context, arg ConfirmCashPaymentParams) (CashPayment, error) {
+	row := q.db.QueryRow(ctx, confirmCashPayment, arg.ConfirmedBy, arg.PaymentID)
+	var i CashPayment
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentID,
+		&i.Status,
+		&i.ConfirmedBy,
+		&i.CreatedAt,
+		&i.ConfirmedAt,
+	)
+	return i, err
+}
+
+const createCashPayment = `-- name: CreateCashPayment :one
+INSERT INTO cash_payments (payment_id)
+VALUES ($1)
+RETURNING id, payment_id, status, confirmed_by, created_at, confirmed_at
+`
+
+func (q *Queries) CreateCashPayment(ctx context.Context, paymentID int64) (CashPayment, error) {
+	row := q.db.QueryRow(ctx, createCashPayment, paymentID)
+	var i CashPayment
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentID,
+		&i.Status,
+		&i.ConfirmedBy,
+		&i.CreatedAt,
+		&i.ConfirmedAt,
+	)
+	return i, err
+}
+
 const createPayment = `-- name: CreatePayment :one
 INSERT INTO payments (user_id, collection_id, base_amount, fee_amount, total_amount, method, stripe_payment_intent_id)
 VALUES ($1, $2, $3, $4, $5, $6::payment_method, $7)
@@ -37,6 +86,52 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		arg.Column6,
 		arg.StripePaymentIntentID,
 	)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CollectionID,
+		&i.BaseAmount,
+		&i.FeeAmount,
+		&i.TotalAmount,
+		&i.Status,
+		&i.Method,
+		&i.StripePaymentIntentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getCashPaymentByPaymentID = `-- name: GetCashPaymentByPaymentID :one
+SELECT id, payment_id, status, confirmed_by, created_at, confirmed_at
+FROM cash_payments
+WHERE payment_id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetCashPaymentByPaymentID(ctx context.Context, paymentID int64) (CashPayment, error) {
+	row := q.db.QueryRow(ctx, getCashPaymentByPaymentID, paymentID)
+	var i CashPayment
+	err := row.Scan(
+		&i.ID,
+		&i.PaymentID,
+		&i.Status,
+		&i.ConfirmedBy,
+		&i.CreatedAt,
+		&i.ConfirmedAt,
+	)
+	return i, err
+}
+
+const getPaymentByID = `-- name: GetPaymentByID :one
+SELECT id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
+FROM payments
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetPaymentByID(ctx context.Context, id int64) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByID, id)
 	var i Payment
 	err := row.Scan(
 		&i.ID,
