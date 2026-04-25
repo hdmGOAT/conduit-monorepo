@@ -24,3 +24,79 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.hero-ring {
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  border: 1px solid rgba(18, 32, 56, 0.14);
+  filter: blur(0.2px);
+  animation: spin 22s linear infinite;
+}
+
+.hero-ring::after {
+  content: "";
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  border: 1px dashed rgba(18, 32, 56, 0.2);
+}
+
+.float-in {
+  opacity: 0;
+  transform: translateY(22px);
+  animation: rise 0.7s ease forwards;
+}
+
+.float-in.delay-1 {
+  animation-delay: 120ms;
+}
+
+.float-in.delay-2 {
+  animation-delay: 240ms;
+}
+
+.float-in.delay-3 {
+  animation-delay: 360ms;
+}
+
+.ticker-track {
+  animation: ticker 24s linear infinite;
+}
+
+.glass-card {
+  background: rgba(248, 247, 242, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+@keyframes rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-ring {
+    width: 420px;
+    height: 420px;
+    right: -140px;
+    top: 160px;
+  }
+}
