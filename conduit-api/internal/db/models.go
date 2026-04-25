@@ -516,7 +516,9 @@ type Payment struct {
 	ID                    int64              `json:"id"`
 	UserID                int64              `json:"user_id"`
 	CollectionID          int64              `json:"collection_id"`
-	Amount                int64              `json:"amount"`
+	BaseAmount            int64              `json:"base_amount"`
+	FeeAmount             int64              `json:"fee_amount"`
+	TotalAmount           int64              `json:"total_amount"`
 	Status                PaymentStatus      `json:"status"`
 	Method                PaymentMethod      `json:"method"`
 	StripePaymentIntentID pgtype.Text        `json:"stripe_payment_intent_id"`
