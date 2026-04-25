@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
 
 	"conduit-monorepo/conduit-api/internal/db"
 
@@ -130,14 +131,66 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		stripePaymentIntentID = pgtype.Text{String: stripeIntent.ID, Valid: true}
 	}
 
-	payment, err := h.db.CreatePayment(c.Request.Context(), db.CreatePaymentParams{
-		UserID:                callerID,
-		CollectionID:          collection.ID,
-		Amount:                collection.Amount,
-		Column4:               method,
-		StripePaymentIntentID: stripePaymentIntentID,
+	var payment db.Payment
+	err = runWithinTx(c.Request.Context(), h.db, func(q db.Querier) error {
+		subscription, err := q.GetOrganizationSubscriptionByGroup(c.Request.Context(), collection.GroupID)
+		if err != nil {
+			return err
+		}
+
+		periodStart, periodEnd := billingPeriodBounds(time.Now().UTC())
+		usage, err := q.GetUsagePeriodByGroupAndStart(c.Request.Context(), db.GetUsagePeriodByGroupAndStartParams{GroupID: collection.GroupID, PeriodStart: periodStart})
+		if err != nil {
+			if !isNoRowsErr(err) {
+				return err
+			}
+
+			usage, err = q.CreateUsagePeriod(c.Request.Context(), db.CreateUsagePeriodParams{
+				GroupID:          collection.GroupID,
+				PeriodStart:      periodStart,
+				PeriodEnd:        periodEnd,
+				TransactionCount: 0,
+				GrossAmount:      0,
+				FeeAmount:        0,
+			})
+			if err != nil {
+				usage, err = q.GetUsagePeriodByGroupAndStart(c.Request.Context(), db.GetUsagePeriodByGroupAndStartParams{GroupID: collection.GroupID, PeriodStart: periodStart})
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		if usage.TransactionCount >= subscription.TransactionCapacityPerPeriod {
+			return newTransactionCapacityError(subscription.Tier, int64(subscription.TransactionCapacityPerPeriod), int64(usage.TransactionCount), usage.PeriodStart, usage.PeriodEnd)
+		}
+
+		payment, err = q.CreatePayment(c.Request.Context(), db.CreatePaymentParams{
+			UserID:                callerID,
+			CollectionID:          collection.ID,
+			Amount:                collection.Amount,
+			Column4:               method,
+			StripePaymentIntentID: stripePaymentIntentID,
+		})
+		if err != nil {
+			return err
+		}
+
+		_, err = q.IncrementUsageForPayment(c.Request.Context(), db.IncrementUsageForPaymentParams{
+			GroupID:          collection.GroupID,
+			PeriodStart:      usage.PeriodStart,
+			TransactionCount: 1,
+			GrossAmount:      collection.Amount,
+			FeeAmount:        calculateFeeAmount(collection.Amount, subscription.TransactionFeeBps),
+		})
+		return err
 	})
 	if err != nil {
+		var limitErr *subscriptionLimitError
+		if errors.As(err, &limitErr) {
+			respondSubscriptionLimitError(c, limitErr)
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create payment"})
 		return
 	}

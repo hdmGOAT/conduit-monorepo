@@ -74,7 +74,7 @@ const getOrganizationSubscriptionByGroup = `-- name: GetOrganizationSubscription
 SELECT id, group_id, tier, member_limit, transaction_capacity_per_period, transaction_fee_bps, created_at, updated_at
 FROM organization_subscriptions
 WHERE group_id = $1
-LIMIT 1
+LIMIT 1 FOR UPDATE
 `
 
 func (q *Queries) GetOrganizationSubscriptionByGroup(ctx context.Context, groupID int64) (OrganizationSubscription, error) {
@@ -98,7 +98,7 @@ SELECT id, group_id, period_start, period_end, transaction_count, gross_amount, 
 FROM subscription_usage_periods
 WHERE group_id = $1
   AND period_start = $2
-LIMIT 1
+LIMIT 1 FOR UPDATE
 `
 
 type GetUsagePeriodByGroupAndStartParams struct {

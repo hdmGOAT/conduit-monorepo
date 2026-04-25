@@ -179,8 +179,41 @@ func (h *GroupsHandler) AddMembership(c *gin.Context) {
 		return
 	}
 
-	m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{Column1: req.UserID, Column2: groupID, Column3: role})
+	var m db.Membership
+	err = runWithinTx(c.Request.Context(), h.db, func(q db.Querier) error {
+		subscription, err := q.GetOrganizationSubscriptionByGroup(c.Request.Context(), groupID)
+		if err != nil {
+			return err
+		}
+
+		memberships, err := q.ListGroupMemberships(c.Request.Context(), groupID)
+		if err != nil {
+			return err
+		}
+		for _, membership := range memberships {
+			if membership.UserID == req.UserID {
+				m, err = q.AddMembership(c.Request.Context(), db.AddMembershipParams{Column1: req.UserID, Column2: groupID, Column3: role})
+				return err
+			}
+		}
+
+		memberCount, err := q.CountMembersByGroup(c.Request.Context(), groupID)
+		if err != nil {
+			return err
+		}
+		if memberCount >= int64(subscription.MemberLimit) {
+			return newMemberLimitError(subscription.Tier, int64(subscription.MemberLimit), memberCount)
+		}
+
+		m, err = q.AddMembership(c.Request.Context(), db.AddMembershipParams{Column1: req.UserID, Column2: groupID, Column3: role})
+		return err
+	})
 	if err != nil {
+		var limitErr *subscriptionLimitError
+		if errors.As(err, &limitErr) {
+			respondSubscriptionLimitError(c, limitErr)
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add membership"})
 		return
 	}
