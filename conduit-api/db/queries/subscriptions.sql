@@ -2,7 +2,7 @@
 SELECT *
 FROM organization_subscriptions
 WHERE group_id = $1
-LIMIT 1;
+LIMIT 1 FOR UPDATE;
 
 -- name: UpsertOrganizationSubscription :one
 INSERT INTO organization_subscriptions (
@@ -33,7 +33,7 @@ SELECT *
 FROM subscription_usage_periods
 WHERE group_id = $1
   AND period_start = $2
-LIMIT 1;
+LIMIT 1 FOR UPDATE;
 
 -- name: CreateUsagePeriod :one
 INSERT INTO subscription_usage_periods (
