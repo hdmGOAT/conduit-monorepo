@@ -8,35 +8,42 @@ import (
 )
 
 const (
-	defaultDBURL = "postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable"
-	defaultJWT   = "dev-change-me"
+	defaultDBURL          = "postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable"
+	defaultJWT            = "dev-change-me"
+	defaultStripeCurrency = "usd"
 )
 
 type Config struct {
-	Port             string
-	DatabaseURL      string
-	JWTSecret        string
-	AccessTTL        time.Duration
-	RefreshTTL       time.Duration
-	PasswordResetTTL time.Duration
-	CookieSecure     bool
-	FrontendURL      string
-	ResendAPIKey     string
-	ResendFromEmail  string
+	Port                string
+	DatabaseURL         string
+	JWTSecret           string
+	AccessTTL           time.Duration
+	RefreshTTL          time.Duration
+	PasswordResetTTL    time.Duration
+	CookieSecure        bool
+	FrontendURL         string
+	ResendAPIKey        string
+	ResendFromEmail     string
+	StripeSecretKey     string
+	StripeWebhookSecret string
+	StripeCurrency      string
 }
 
 func Load() Config {
 	return Config{
-		Port:             envOrDefault("PORT", "8080"),
-		DatabaseURL:      envOrDefault("DATABASE_URL", defaultDBURL),
-		JWTSecret:        envOrDefault("JWT_SECRET", defaultJWT),
-		AccessTTL:        time.Duration(envIntOrDefault("ACCESS_TOKEN_TTL_MINUTES", 15)) * time.Minute,
-		RefreshTTL:       time.Duration(envIntOrDefault("REFRESH_TOKEN_TTL_HOURS", 168)) * time.Hour,
-		PasswordResetTTL: time.Duration(envIntOrDefault("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,
-		CookieSecure:     envOrDefault("COOKIE_SECURE", "false") == "true",
-		FrontendURL:      envOrDefault("FRONTEND_URL", "http://localhost:3000"),
-		ResendAPIKey:     envOrDefault("RESEND_API_KEY", ""),
-		ResendFromEmail:  envOrDefault("RESEND_FROM_EMAIL", ""),
+		Port:                envOrDefault("PORT", "8080"),
+		DatabaseURL:         envOrDefault("DATABASE_URL", defaultDBURL),
+		JWTSecret:           envOrDefault("JWT_SECRET", defaultJWT),
+		AccessTTL:           time.Duration(envIntOrDefault("ACCESS_TOKEN_TTL_MINUTES", 15)) * time.Minute,
+		RefreshTTL:          time.Duration(envIntOrDefault("REFRESH_TOKEN_TTL_HOURS", 168)) * time.Hour,
+		PasswordResetTTL:    time.Duration(envIntOrDefault("PASSWORD_RESET_TTL_MINUTES", 30)) * time.Minute,
+		CookieSecure:        envOrDefault("COOKIE_SECURE", "false") == "true",
+		FrontendURL:         envOrDefault("FRONTEND_URL", "http://localhost:3000"),
+		ResendAPIKey:        envOrDefault("RESEND_API_KEY", ""),
+		ResendFromEmail:     envOrDefault("RESEND_FROM_EMAIL", ""),
+		StripeSecretKey:     envOrDefault("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret: envOrDefault("STRIPE_WEBHOOK_SECRET", ""),
+		StripeCurrency:      envOrDefault("STRIPE_CURRENCY", defaultStripeCurrency),
 	}
 }
 

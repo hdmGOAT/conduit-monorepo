@@ -7,42 +7,45 @@ import (
 )
 
 type fakeDB struct {
-	createGroupFn                     func(ctx context.Context, arg db.CreateGroupParams) (db.Group, error)
-	addMembershipFn                   func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error)
-	listGroupMembershipsFn            func(ctx context.Context, groupID int64) ([]db.Membership, error)
-	listGroupsByOwnerFn               func(ctx context.Context, ownerID int64) ([]db.Group, error)
-	createJoinRequestFn               func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error)
-	listJoinRequestsByGroupFn         func(ctx context.Context, groupID int64) ([]db.JoinRequest, error)
-	updateJoinRequestStatusFn         func(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error)
-	updateGroupIsOpenFn               func(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error)
-	deleteMembershipFn                func(ctx context.Context, arg db.DeleteMembershipParams) (db.Membership, error)
-	updateGroupFn                     func(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error)
-	deleteGroupFn                     func(ctx context.Context, id int64) (db.Group, error)
-	getGroupByIDFn                    func(ctx context.Context, id int64) (db.Group, error)
-	getCollectionFn                   func(ctx context.Context, id int64) (db.Collection, error)
-	closeCollectionFn                 func(ctx context.Context, arg db.CloseCollectionParams) (db.Collection, error)
-	createCollectionFn                func(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error)
-	updateCollectionFn                func(ctx context.Context, arg db.UpdateCollectionParams) (db.Collection, error)
-	deleteCollectionFn                func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error)
-	createPaymentFn                   func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error)
-	createCollectionFormFn            func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error)
-	updateCollectionFormFn            func(ctx context.Context, arg db.UpdateCollectionFormParams) (db.CollectionForm, error)
-	deleteCollectionFormFn            func(ctx context.Context, id int64) (db.CollectionForm, error)
-	getCollectionFormByCollectionIDFn func(ctx context.Context, collectionID int64) (db.CollectionForm, error)
-	getCollectionFormByIDFn           func(ctx context.Context, id int64) (db.CollectionForm, error)
-	listCollectionFormFieldsFn        func(ctx context.Context, formID int64) ([]db.CollectionFormField, error)
-	createCollectionFormFieldFn       func(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error)
-	createFormSubmissionFn            func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error)
-	addFormAnswerFn                   func(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error)
-	listPaymentsByCollectionFn        func(ctx context.Context, collectionID int64) ([]db.Payment, error)
-	listFormSubmissionsByCollectionFn func(ctx context.Context, collectionID int64) ([]db.CollectionFormSubmission, error)
-	getFormSubmissionByIDFn           func(ctx context.Context, id int64) (db.CollectionFormSubmission, error)
-	updateFormSubmissionFn            func(ctx context.Context, arg db.UpdateFormSubmissionParams) (db.CollectionFormSubmission, error)
-	deleteFormSubmissionFn            func(ctx context.Context, id int64) (db.CollectionFormSubmission, error)
-	listFormAnswersBySubmissionFn     func(ctx context.Context, submissionID int64) ([]db.CollectionFormAnswer, error)
-	getFormAnswerByIDFn               func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
-	updateFormAnswerFn                func(ctx context.Context, arg db.UpdateFormAnswerParams) (db.CollectionFormAnswer, error)
-	deleteFormAnswerFn                func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
+	createGroupFn                       func(ctx context.Context, arg db.CreateGroupParams) (db.Group, error)
+	addMembershipFn                     func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error)
+	listGroupMembershipsFn              func(ctx context.Context, groupID int64) ([]db.Membership, error)
+	listGroupsByOwnerFn                 func(ctx context.Context, ownerID int64) ([]db.Group, error)
+	createJoinRequestFn                 func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error)
+	listJoinRequestsByGroupFn           func(ctx context.Context, groupID int64) ([]db.JoinRequest, error)
+	updateJoinRequestStatusFn           func(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error)
+	updateGroupIsOpenFn                 func(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error)
+	deleteMembershipFn                  func(ctx context.Context, arg db.DeleteMembershipParams) (db.Membership, error)
+	updateGroupFn                       func(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error)
+	deleteGroupFn                       func(ctx context.Context, id int64) (db.Group, error)
+	getGroupByIDFn                      func(ctx context.Context, id int64) (db.Group, error)
+	getCollectionFn                     func(ctx context.Context, id int64) (db.Collection, error)
+	closeCollectionFn                   func(ctx context.Context, arg db.CloseCollectionParams) (db.Collection, error)
+	createCollectionFn                  func(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error)
+	updateCollectionFn                  func(ctx context.Context, arg db.UpdateCollectionParams) (db.Collection, error)
+	deleteCollectionFn                  func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error)
+	createPaymentFn                     func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error)
+	createCollectionFormFn              func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error)
+	updateCollectionFormFn              func(ctx context.Context, arg db.UpdateCollectionFormParams) (db.CollectionForm, error)
+	deleteCollectionFormFn              func(ctx context.Context, id int64) (db.CollectionForm, error)
+	getCollectionFormByCollectionIDFn   func(ctx context.Context, collectionID int64) (db.CollectionForm, error)
+	getCollectionFormByIDFn             func(ctx context.Context, id int64) (db.CollectionForm, error)
+	listCollectionFormFieldsFn          func(ctx context.Context, formID int64) ([]db.CollectionFormField, error)
+	createCollectionFormFieldFn         func(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error)
+	createFormSubmissionFn              func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error)
+	addFormAnswerFn                     func(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error)
+	getPaymentByStripePaymentIntentIDFn func(ctx context.Context, stripePaymentIntentID string) (db.Payment, error)
+	markPaymentPaidFn                   func(ctx context.Context, id int64) (db.Payment, error)
+	markPaymentFailedFn                 func(ctx context.Context, id int64) (db.Payment, error)
+	listPaymentsByCollectionFn          func(ctx context.Context, collectionID int64) ([]db.Payment, error)
+	listFormSubmissionsByCollectionFn   func(ctx context.Context, collectionID int64) ([]db.CollectionFormSubmission, error)
+	getFormSubmissionByIDFn             func(ctx context.Context, id int64) (db.CollectionFormSubmission, error)
+	updateFormSubmissionFn              func(ctx context.Context, arg db.UpdateFormSubmissionParams) (db.CollectionFormSubmission, error)
+	deleteFormSubmissionFn              func(ctx context.Context, id int64) (db.CollectionFormSubmission, error)
+	listFormAnswersBySubmissionFn       func(ctx context.Context, submissionID int64) ([]db.CollectionFormAnswer, error)
+	getFormAnswerByIDFn                 func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
+	updateFormAnswerFn                  func(ctx context.Context, arg db.UpdateFormAnswerParams) (db.CollectionFormAnswer, error)
+	deleteFormAnswerFn                  func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
 }
 
 var _ db.Querier = (*fakeDB)(nil)
@@ -225,9 +228,15 @@ func (f *fakeDB) MarkPasswordResetTokensUsedForUser(ctx context.Context, userID 
 	return nil
 }
 func (f *fakeDB) MarkPaymentFailed(ctx context.Context, id int64) (db.Payment, error) {
+	if f.markPaymentFailedFn != nil {
+		return f.markPaymentFailedFn(ctx, id)
+	}
 	return db.Payment{}, nil
 }
 func (f *fakeDB) MarkPaymentPaid(ctx context.Context, id int64) (db.Payment, error) {
+	if f.markPaymentPaidFn != nil {
+		return f.markPaymentPaidFn(ctx, id)
+	}
 	return db.Payment{}, nil
 }
 func (f *fakeDB) RevokeRefreshToken(ctx context.Context, tokenID string) error       { return nil }
@@ -304,6 +313,13 @@ func (f *fakeDB) GetCollectionFormByID(ctx context.Context, id int64) (db.Collec
 		return f.getCollectionFormByIDFn(ctx, id)
 	}
 	return db.CollectionForm{}, nil
+}
+
+func (f *fakeDB) GetPaymentByStripePaymentIntentID(ctx context.Context, stripePaymentIntentID string) (db.Payment, error) {
+	if f.getPaymentByStripePaymentIntentIDFn != nil {
+		return f.getPaymentByStripePaymentIntentIDFn(ctx, stripePaymentIntentID)
+	}
+	return db.Payment{}, nil
 }
 
 func (f *fakeDB) GetFormAnswerByID(ctx context.Context, id int64) (db.CollectionFormAnswer, error) {
