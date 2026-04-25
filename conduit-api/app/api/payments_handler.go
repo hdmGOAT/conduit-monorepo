@@ -66,6 +66,24 @@ func paymentResponse(payment db.Payment, stripeIntent *stripePaymentIntent) gin.
 	return out
 }
 
+func cashPaymentResponse(cashPayment db.CashPayment) gin.H {
+	return gin.H{
+		"id":           cashPayment.ID,
+		"payment_id":   cashPayment.PaymentID,
+		"status":       cashPayment.Status,
+		"confirmed_by": int8ToInterface(cashPayment.ConfirmedBy),
+		"created_at":   timeToInterface(cashPayment.CreatedAt),
+		"confirmed_at": timeToInterface(cashPayment.ConfirmedAt),
+	}
+}
+
+func int8ToInterface(v pgtype.Int8) interface{} {
+	if !v.Valid {
+		return nil
+	}
+	return v.Int64
+}
+
 // CreatePayment creates a pending payment for an active collection.
 func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	callerID, ok := userIDFromContext(c)
@@ -187,6 +205,12 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		})
 		if err != nil {
 			return err
+		}
+
+		if method == db.PaymentMethodCash {
+			if _, err := q.CreateCashPayment(c.Request.Context(), payment.ID); err != nil {
+				return err
+			}
 		}
 
 		_, err = q.IncrementUsageForPayment(c.Request.Context(), db.IncrementUsageForPaymentParams{
@@ -326,4 +350,85 @@ func (h *PaymentsHandler) ListPaymentsByCollection(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, out)
+}
+
+// ConfirmCashPayment confirms a pending cash payment. Caller must be a collector in the group.
+func (h *PaymentsHandler) ConfirmCashPayment(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	paymentID, err := strconv.ParseInt(c.Param("payment_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment id"})
+		return
+	}
+
+	payment, err := h.db.GetPaymentByID(c.Request.Context(), paymentID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "payment not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment"})
+		return
+	}
+
+	if payment.Method != db.PaymentMethodCash {
+		c.JSON(http.StatusConflict, gin.H{"error": "payment method is not cash"})
+		return
+	}
+
+	collection, err := h.db.GetCollection(c.Request.Context(), payment.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment collection"})
+		return
+	}
+
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, collection.GroupID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify group access"})
+		return
+	}
+	if role != db.MembershipRoleCollector {
+		c.JSON(http.StatusForbidden, gin.H{"error": "collector role required"})
+		return
+	}
+
+	var confirmedPayment db.Payment
+	var confirmedCashPayment db.CashPayment
+	err = runWithinTx(c.Request.Context(), h.db, func(q db.Querier) error {
+		confirmedPayment, err = q.MarkPaymentPaid(c.Request.Context(), payment.ID)
+		if err != nil {
+			return err
+		}
+
+		confirmedCashPayment, err = q.ConfirmCashPayment(c.Request.Context(), db.ConfirmCashPaymentParams{
+			ConfirmedBy: callerID,
+			PaymentID:   payment.ID,
+		})
+		return err
+	})
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "payment is already confirmed or not pending"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to confirm cash payment"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"payment":      paymentResponse(confirmedPayment, nil),
+		"cash_payment": cashPaymentResponse(confirmedCashPayment),
+	})
 }

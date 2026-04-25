@@ -32,6 +32,7 @@ type fakeDB struct {
 	updateCollectionFn                   func(ctx context.Context, arg db.UpdateCollectionParams) (db.Collection, error)
 	deleteCollectionFn                   func(ctx context.Context, arg db.DeleteCollectionParams) (db.Collection, error)
 	createPaymentFn                      func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error)
+	createCashPaymentFn                  func(ctx context.Context, paymentID int64) (db.CashPayment, error)
 	createCollectionFormFn               func(ctx context.Context, arg db.CreateCollectionFormParams) (db.CollectionForm, error)
 	updateCollectionFormFn               func(ctx context.Context, arg db.UpdateCollectionFormParams) (db.CollectionForm, error)
 	deleteCollectionFormFn               func(ctx context.Context, id int64) (db.CollectionForm, error)
@@ -41,7 +42,10 @@ type fakeDB struct {
 	createCollectionFormFieldFn          func(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error)
 	createFormSubmissionFn               func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error)
 	addFormAnswerFn                      func(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error)
+	getPaymentByIDFn                     func(ctx context.Context, id int64) (db.Payment, error)
+	getCashPaymentByPaymentIDFn          func(ctx context.Context, paymentID int64) (db.CashPayment, error)
 	getPaymentByStripePaymentIntentIDFn  func(ctx context.Context, stripePaymentIntentID string) (db.Payment, error)
+	confirmCashPaymentFn                 func(ctx context.Context, arg db.ConfirmCashPaymentParams) (db.CashPayment, error)
 	markPaymentPaidFn                    func(ctx context.Context, id int64) (db.Payment, error)
 	markPaymentFailedFn                  func(ctx context.Context, id int64) (db.Payment, error)
 	listPaymentsByCollectionFn           func(ctx context.Context, collectionID int64) ([]db.Payment, error)
@@ -123,6 +127,12 @@ func (f *fakeDB) CreatePayment(ctx context.Context, arg db.CreatePaymentParams) 
 		return f.createPaymentFn(ctx, arg)
 	}
 	return db.Payment{}, nil
+}
+func (f *fakeDB) CreateCashPayment(ctx context.Context, paymentID int64) (db.CashPayment, error) {
+	if f.createCashPaymentFn != nil {
+		return f.createCashPaymentFn(ctx, paymentID)
+	}
+	return db.CashPayment{}, nil
 }
 func (f *fakeDB) CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error) {
 	return db.RefreshToken{}, nil
@@ -253,6 +263,18 @@ func (f *fakeDB) GetCollection(ctx context.Context, id int64) (db.Collection, er
 	}
 	return db.Collection{}, nil
 }
+func (f *fakeDB) GetPaymentByID(ctx context.Context, id int64) (db.Payment, error) {
+	if f.getPaymentByIDFn != nil {
+		return f.getPaymentByIDFn(ctx, id)
+	}
+	return db.Payment{}, nil
+}
+func (f *fakeDB) GetCashPaymentByPaymentID(ctx context.Context, paymentID int64) (db.CashPayment, error) {
+	if f.getCashPaymentByPaymentIDFn != nil {
+		return f.getCashPaymentByPaymentIDFn(ctx, paymentID)
+	}
+	return db.CashPayment{}, nil
+}
 func (f *fakeDB) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]db.Payment, error) {
 	if f.listPaymentsByCollectionFn != nil {
 		return f.listPaymentsByCollectionFn(ctx, collectionID)
@@ -276,6 +298,12 @@ func (f *fakeDB) MarkPaymentPaid(ctx context.Context, id int64) (db.Payment, err
 		return f.markPaymentPaidFn(ctx, id)
 	}
 	return db.Payment{}, nil
+}
+func (f *fakeDB) ConfirmCashPayment(ctx context.Context, arg db.ConfirmCashPaymentParams) (db.CashPayment, error) {
+	if f.confirmCashPaymentFn != nil {
+		return f.confirmCashPaymentFn(ctx, arg)
+	}
+	return db.CashPayment{}, nil
 }
 func (f *fakeDB) IncrementUsageForPayment(ctx context.Context, arg db.IncrementUsageForPaymentParams) (db.SubscriptionUsagePeriod, error) {
 	return db.SubscriptionUsagePeriod{}, nil

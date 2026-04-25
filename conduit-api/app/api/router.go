@@ -51,6 +51,7 @@ func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectio
 	// Payments routes (per-collection)
 	api.POST("/collections/:collection_id/payments", middleware.RequireAuth(authService), paymentsHandler.CreatePayment)
 	api.GET("/collections/:collection_id/payments", middleware.RequireAuth(authService), paymentsHandler.ListPaymentsByCollection)
+	api.POST("/payments/:payment_id/cash/confirm", middleware.RequireAuth(authService), paymentsHandler.ConfirmCashPayment)
 	api.POST("/webhooks/stripe", paymentsHandler.HandleStripeWebhook)
 
 	// Forms & submissions
