@@ -49,6 +49,14 @@
   ],
   "item": [
     {
+      "name": "Ping",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/ping"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('ping returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
       "name": "Owner - Register",
       "request": {
         "method": "POST",
@@ -192,6 +200,25 @@
         "url": "{{base_url}}/api/groups"
       },
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create open group ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('group_open_id', json.id); }" ] } } ]
+    },
+    {
+      "name": "Subscription - Get Group Snapshot",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/subscriptions/groups/{{group_open_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('subscription snapshot route exists or is pending rollout', function(){pm.expect([200,404]).to.include(pm.response.code);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.test('subscription snapshot has tier and limits', function(){ pm.expect(json).to.have.property('tier'); pm.expect(json).to.have.property('member_limit'); pm.expect(json).to.have.property('transaction_capacity_per_period'); }); }" ] } } ]
+    },
+    {
+      "name": "Subscription - Change Group Tier",
+      "request": {
+        "method": "PATCH",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"tier\":\"starter\"}" },
+        "url": "{{base_url}}/api/subscriptions/groups/{{group_open_id}}"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('subscription update route exists or is pending rollout', function(){pm.expect([200,404]).to.include(pm.response.code);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.test('tier updated to starter', function(){ pm.expect(json.tier).to.eql('starter'); }); }" ] } } ]
     },
     {
       "name": "Create Moderator Group",
@@ -351,7 +378,7 @@
       "request": {
         "method": "POST",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\"amount\":1000,\"deadline\":\"2027-12-31T23:59:59Z\"}" },
+        "body": { "mode": "raw", "raw": "{\"amount\":50000,\"deadline\":\"2027-12-31T23:59:59Z\"}" },
         "url": "{{base_url}}/api/groups/{{group_open_id}}/collections"
       },
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('create collection ok', function(){pm.response.to.have.status(200);});", "if (pm.response.code === 200) { var json = pm.response.json(); pm.environment.set('collection_id', json.id); }" ] } } ]
@@ -366,14 +393,24 @@
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list collections returns 200', function(){pm.response.to.have.status(200);});", "var collections = pm.response.json(); var collectionId = String(pm.environment.get('collection_id')); pm.test('collection is listed', function(){ pm.expect(collections.some(function(c){ return String(c.id) === collectionId; })).to.be.true; });" ] } } ]
     },
     {
+      "name": "Owner Adds Moderator as Collector to Open Group",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "body": { "mode": "raw", "raw": "{\"user_id\":{{moderator_user_id}},\"role\":\"collector\"}" },
+        "url": "{{base_url}}/api/groups/{{group_open_id}}/memberships"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('add collector role returns 200', function(){pm.response.to.have.status(200);});" ] } } ]
+    },
+    {
       "name": "Update Collection",
       "request": {
         "method": "PATCH",
         "header": [ { "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
-        "body": { "mode": "raw", "raw": "{\"amount\":2000,\"deadline\":\"2027-11-30T23:59:59Z\"}" },
+        "body": { "mode": "raw", "raw": "{\"amount\":60000,\"deadline\":\"2027-11-30T23:59:59Z\"}" },
         "url": "{{base_url}}/api/groups/{{group_open_id}}/collections/{{collection_id}}"
       },
-      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update collection returns 200', function(){pm.response.to.have.status(200);});", "pm.test('collection updated', function(){ var json = pm.response.json(); pm.expect(json.amount).to.eql(2000); });" ] } } ]
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('update collection returns 200', function(){pm.response.to.have.status(200);});", "pm.test('collection updated', function(){ var json = pm.response.json(); pm.expect(json.amount).to.eql(60000); });" ] } } ]
     },
     {
       "name": "Member Creates Payment",
@@ -425,6 +462,24 @@
         "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
       },
       "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var ownerPaymentId = String(pm.environment.get('owner_payment_id')); var ownerIntentId = String(pm.environment.get('owner_payment_stripe_intent_id')); var ownerPayment = payments.find(function(payment){ return String(payment.id) === ownerPaymentId; }); var cashPayment = payments.find(function(payment){ return payment.method === 'cash'; });", "pm.test('payment list still has two rows', function(){ pm.expect(payments.length).to.eql(2); pm.expect(String(payments[0].id)).to.eql(ownerPaymentId); });", "pm.test('owner payment marked paid in db', function(){ pm.expect(ownerPayment).to.exist; pm.expect(ownerPayment.status).to.eql('paid'); pm.expect(ownerPayment.method).to.eql('stripe'); pm.expect(String(ownerPayment.stripe_payment_intent_id)).to.eql(ownerIntentId); });", "pm.test('cash payment remains pending', function(){ pm.expect(cashPayment).to.exist; pm.expect(cashPayment.status).to.eql('pending'); });" ] } } ]
+    },
+    {
+      "name": "Collector Confirms Member Cash Payment",
+      "request": {
+        "method": "POST",
+        "header": [ { "key": "Authorization", "value": "Bearer {{moderator_access_token}}" } ],
+        "url": "{{base_url}}/api/payments/{{member_payment_id}}/cash/confirm"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('confirm cash payment returns 200', function(){pm.response.to.have.status(200);});", "pm.test('cash payment status is confirmed', function(){ var json = pm.response.json(); pm.expect(json.payment.status).to.eql('paid'); pm.expect(json.payment.method).to.eql('cash'); });" ] } } ]
+    },
+    {
+      "name": "List Payments After Cash Confirmation",
+      "request": {
+        "method": "GET",
+        "header": [ { "key": "Authorization", "value": "Bearer {{owner_access_token}}" } ],
+        "url": "{{base_url}}/api/collections/{{collection_id}}/payments"
+      },
+      "event": [ { "listen": "test", "script": { "type": "text/javascript", "exec": [ "pm.test('list payments returns 200', function(){pm.response.to.have.status(200);});", "var payments = pm.response.json(); var memberPaymentId = String(pm.environment.get('member_payment_id')); var memberPayment = payments.find(function(payment){ return String(payment.id) === memberPaymentId; });", "pm.test('member cash payment marked paid', function(){ pm.expect(memberPayment).to.exist; pm.expect(memberPayment.status).to.eql('paid'); pm.expect(memberPayment.method).to.eql('cash'); });" ] } } ]
     },
     {
       "name": "Victim Cannot Create Payment",
