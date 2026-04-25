@@ -47,6 +47,29 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 	return i, err
 }
 
+const getPaymentByStripePaymentIntentID = `-- name: GetPaymentByStripePaymentIntentID :one
+SELECT id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+FROM payments
+WHERE stripe_payment_intent_id = $1::text
+LIMIT 1
+`
+
+func (q *Queries) GetPaymentByStripePaymentIntentID(ctx context.Context, stripePaymentIntentID string) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByStripePaymentIntentID, stripePaymentIntentID)
+	var i Payment
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CollectionID,
+		&i.Amount,
+		&i.Status,
+		&i.Method,
+		&i.StripePaymentIntentID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const listPaymentsByCollection = `-- name: ListPaymentsByCollection :many
 SELECT id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
 FROM payments
@@ -83,33 +106,11 @@ func (q *Queries) ListPaymentsByCollection(ctx context.Context, collectionID int
 	return items, nil
 }
 
-const getPaymentByStripePaymentIntentID = `-- name: GetPaymentByStripePaymentIntentID :one
-SELECT id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
-FROM payments
-WHERE stripe_payment_intent_id = $1
-LIMIT 1
-`
-
-func (q *Queries) GetPaymentByStripePaymentIntentID(ctx context.Context, stripePaymentIntentID string) (Payment, error) {
-	row := q.db.QueryRow(ctx, getPaymentByStripePaymentIntentID, stripePaymentIntentID)
-	var i Payment
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.CollectionID,
-		&i.Amount,
-		&i.Status,
-		&i.Method,
-		&i.StripePaymentIntentID,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const markPaymentFailed = `-- name: MarkPaymentFailed :one
 UPDATE payments
 SET status = 'failed'
 WHERE id = $1
+	AND status = 'pending'
 RETURNING id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
 `
 
@@ -133,6 +134,7 @@ const markPaymentPaid = `-- name: MarkPaymentPaid :one
 UPDATE payments
 SET status = 'paid'
 WHERE id = $1
+	AND status = 'pending'
 RETURNING id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
 `
 

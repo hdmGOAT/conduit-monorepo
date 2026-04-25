@@ -7,12 +7,14 @@ RETURNING *;
 UPDATE payments
 SET status = 'paid'
 WHERE id = $1
+	AND status = 'pending'
 RETURNING *;
 
 -- name: MarkPaymentFailed :one
 UPDATE payments
 SET status = 'failed'
 WHERE id = $1
+	AND status = 'pending'
 RETURNING *;
 
 -- name: ListPaymentsByCollection :many
@@ -24,5 +26,5 @@ ORDER BY id DESC;
 -- name: GetPaymentByStripePaymentIntentID :one
 SELECT *
 FROM payments
-WHERE stripe_payment_intent_id = $1
+WHERE stripe_payment_intent_id = sqlc.arg(stripe_payment_intent_id)::text
 LIMIT 1;

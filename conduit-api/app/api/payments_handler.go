@@ -2,7 +2,8 @@ package api
 
 import (
 	"context"
-	"fmt"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -113,7 +114,13 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 			"amount":        strconv.FormatInt(collection.Amount, 10),
 		})
 		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": fmt.Sprintf("failed to create stripe payment intent: %v", err)})
+			if errors.Is(err, errStripeNotConfigured) {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe payments are not configured"})
+				return
+			}
+
+			log.Printf("failed to create stripe payment intent: method=%s path=%s collection_id=%d user_id=%d err=%v", c.Request.Method, c.Request.URL.Path, collection.ID, callerID, err)
+			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to create stripe payment intent"})
 			return
 		}
 	}
@@ -153,6 +160,11 @@ func (h *PaymentsHandler) HandleStripeWebhook(c *gin.Context) {
 
 	event, err := h.stripe.ParseWebhookEvent(payload, c.GetHeader("Stripe-Signature"))
 	if err != nil {
+		if errors.Is(err, errStripeNotConfigured) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe payments are not configured"})
+			return
+		}
+
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stripe webhook"})
 		return
 	}
@@ -174,11 +186,11 @@ func (h *PaymentsHandler) HandleStripeWebhook(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment"})
 			return
 		}
-		if payment.Status != db.PaymentStatusPending {
-			c.Status(http.StatusOK)
-			return
-		}
 		if _, err := h.db.MarkPaymentPaid(ctx, payment.ID); err != nil {
+			if isNoRowsErr(err) {
+				c.Status(http.StatusOK)
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to mark payment paid"})
 			return
 		}
@@ -192,11 +204,11 @@ func (h *PaymentsHandler) HandleStripeWebhook(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment"})
 			return
 		}
-		if payment.Status != db.PaymentStatusPending {
-			c.Status(http.StatusOK)
-			return
-		}
 		if _, err := h.db.MarkPaymentFailed(ctx, payment.ID); err != nil {
+			if isNoRowsErr(err) {
+				c.Status(http.StatusOK)
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to mark payment failed"})
 			return
 		}

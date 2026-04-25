@@ -192,11 +192,17 @@ func TestStripeWebhook_TransitionsAreIdempotent(t *testing.T) {
 			return db.Payment{ID: 91, Status: paymentStatus, StripePaymentIntentID: pgtype.Text{String: stripePaymentIntentID, Valid: true}}, nil
 		},
 		markPaymentPaidFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			if paymentStatus != db.PaymentStatusPending {
+				return db.Payment{}, sql.ErrNoRows
+			}
 			paidCalls++
 			paymentStatus = db.PaymentStatusPaid
 			return db.Payment{ID: id, Status: paymentStatus}, nil
 		},
 		markPaymentFailedFn: func(ctx context.Context, id int64) (db.Payment, error) {
+			if paymentStatus != db.PaymentStatusPending {
+				return db.Payment{}, sql.ErrNoRows
+			}
 			failedCalls++
 			paymentStatus = db.PaymentStatusFailed
 			return db.Payment{ID: id, Status: db.PaymentStatusFailed}, nil
@@ -304,21 +310,27 @@ func TestStripePaymentFlow_CreateThenWebhookTransitions(t *testing.T) {
 					return payment, nil
 				},
 				markPaymentPaidFn: func(ctx context.Context, id int64) (db.Payment, error) {
-					paidCalls++
 					payment, ok := paymentsByIntentID[paymentIntentID]
 					if !ok || payment.ID != id {
 						t.Fatalf("unexpected payment id for paid transition: got %d, want %d", id, payment.ID)
 					}
+					if payment.Status != db.PaymentStatusPending {
+						return db.Payment{}, sql.ErrNoRows
+					}
+					paidCalls++
 					payment.Status = db.PaymentStatusPaid
 					paymentsByIntentID[paymentIntentID] = payment
 					return payment, nil
 				},
 				markPaymentFailedFn: func(ctx context.Context, id int64) (db.Payment, error) {
-					failedCalls++
 					payment, ok := paymentsByIntentID[paymentIntentID]
 					if !ok || payment.ID != id {
 						t.Fatalf("unexpected payment id for failed transition: got %d, want %d", id, payment.ID)
 					}
+					if payment.Status != db.PaymentStatusPending {
+						return db.Payment{}, sql.ErrNoRows
+					}
+					failedCalls++
 					payment.Status = db.PaymentStatusFailed
 					paymentsByIntentID[paymentIntentID] = payment
 					return payment, nil

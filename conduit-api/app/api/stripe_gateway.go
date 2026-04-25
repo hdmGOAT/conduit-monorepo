@@ -2,12 +2,15 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
 	stripe "github.com/stripe/stripe-go/v84"
+	"github.com/stripe/stripe-go/v84/webhook"
 )
+
+var errStripeNotConfigured = errors.New("stripe payments are not configured")
 
 type stripeGateway interface {
 	CreatePaymentIntent(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error)
@@ -31,21 +34,27 @@ type stripeClient struct {
 }
 
 func NewStripeGateway(secretKey, webhookSecret, currency string) stripeGateway {
+	normalizedSecretKey := strings.TrimSpace(secretKey)
+	normalizedWebhookSecret := strings.TrimSpace(webhookSecret)
+	if normalizedSecretKey == "" || normalizedWebhookSecret == "" {
+		return nil
+	}
+
 	normalizedCurrency := strings.ToLower(strings.TrimSpace(currency))
 	if normalizedCurrency == "" {
 		normalizedCurrency = string(stripe.CurrencyUSD)
 	}
 
 	return &stripeClient{
-		client:        stripe.NewClient(secretKey),
-		webhookSecret: strings.TrimSpace(webhookSecret),
+		client:        stripe.NewClient(normalizedSecretKey),
+		webhookSecret: normalizedWebhookSecret,
 		currency:      normalizedCurrency,
 	}
 }
 
 func (s *stripeClient) CreatePaymentIntent(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error) {
-	if s == nil {
-		return nil, fmt.Errorf("stripe gateway is not configured")
+	if s == nil || s.client == nil {
+		return nil, errStripeNotConfigured
 	}
 
 	params := &stripe.PaymentIntentCreateParams{
@@ -59,22 +68,25 @@ func (s *stripeClient) CreatePaymentIntent(ctx context.Context, amount int64, me
 	if err != nil {
 		return nil, err
 	}
+	if intent.ClientSecret == "" {
+		return nil, fmt.Errorf("stripe payment intent client secret is empty")
+	}
 
 	return &stripePaymentIntent{
 		ID:           intent.ID,
-		ClientSecret: stringFieldValue(intent, "ClientSecret"),
+		ClientSecret: intent.ClientSecret,
 	}, nil
 }
 
 func (s *stripeClient) ParseWebhookEvent(payload []byte, signature string) (stripeWebhookEvent, error) {
 	if s == nil {
-		return stripeWebhookEvent{}, fmt.Errorf("stripe gateway is not configured")
+		return stripeWebhookEvent{}, errStripeNotConfigured
 	}
 	if s.webhookSecret == "" {
-		return stripeWebhookEvent{}, fmt.Errorf("stripe webhook secret is not configured")
+		return stripeWebhookEvent{}, errStripeNotConfigured
 	}
 
-	event, err := stripe.ConstructEvent(payload, signature, s.webhookSecret)
+	event, err := webhook.ConstructEvent(payload, signature, s.webhookSecret)
 	if err != nil {
 		return stripeWebhookEvent{}, err
 	}
@@ -86,37 +98,4 @@ func (s *stripeClient) ParseWebhookEvent(payload []byte, signature string) (stri
 	}
 
 	return result, nil
-}
-
-func stringFieldValue(value any, fieldName string) string {
-	if value == nil {
-		return ""
-	}
-
-	field := reflect.ValueOf(value)
-	if field.Kind() != reflect.Ptr || field.IsNil() {
-		return ""
-	}
-	field = field.Elem()
-	if field.Kind() != reflect.Struct {
-		return ""
-	}
-
-	member := field.FieldByName(fieldName)
-	if !member.IsValid() {
-		return ""
-	}
-	switch member.Kind() {
-	case reflect.String:
-		return member.String()
-	case reflect.Ptr:
-		if member.IsNil() {
-			return ""
-		}
-		if member.Elem().Kind() == reflect.String {
-			return member.Elem().String()
-		}
-	}
-
-	return ""
 }
