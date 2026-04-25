@@ -17,9 +17,13 @@ import (
 
 // use the centralized fake in fake_db_test.go
 func newTestRouterWithDeps(service AuthService, dbq db.Querier, stripeGateway ...stripeGateway) *gin.Engine {
+	return newTestRouterWithDepsAndDefaults(service, dbq, GroupSubscriptionDefaults{}, stripeGateway...)
+}
+
+func newTestRouterWithDepsAndDefaults(service AuthService, dbq db.Querier, defaults GroupSubscriptionDefaults, stripeGateway ...stripeGateway) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
-	groupsHandler := NewGroupsHandler(dbq)
+	groupsHandler := NewGroupsHandler(dbq, defaults)
 	collectionsHandler := NewCollectionsHandler(dbq)
 	paymentsHandler := NewPaymentsHandler(dbq, stripeGateway...)
 	formsHandler := NewFormsHandler(dbq)
@@ -97,6 +101,47 @@ func TestCreateGroup_SetIsOpen(t *testing.T) {
 	}
 	if v, ok := out["is_open"].(bool); !ok || v != true {
 		t.Fatalf("expected is_open true, got %v", out)
+	}
+}
+
+func TestCreateGroup_InitializesSubscriptionWithDefaults(t *testing.T) {
+	fake := &fakeDB{
+		createGroupFn: func(ctx context.Context, arg db.CreateGroupParams) (db.Group, error) {
+			return db.Group{ID: 789, OwnerID: arg.OwnerID, Name: arg.Name, IsOpen: arg.IsOpen, CreatedAt: pgtype.Timestamptz{}}, nil
+		},
+		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: arg.Column3, CreatedAt: pgtype.Timestamptz{}}, nil
+		},
+		upsertOrganizationSubscriptionFn: func(ctx context.Context, arg db.UpsertOrganizationSubscriptionParams) (db.OrganizationSubscription, error) {
+			if arg.GroupID != 789 {
+				t.Fatalf("expected subscription for group 789, got %d", arg.GroupID)
+			}
+			if arg.Tier != db.SubscriptionTierStarter {
+				t.Fatalf("expected starter tier, got %s", arg.Tier)
+			}
+			if arg.MemberLimit != 50 || arg.TransactionCapacityPerPeriod != 1000 || arg.TransactionFeeBps != 75 {
+				t.Fatalf("unexpected defaults: %+v", arg)
+			}
+			return db.OrganizationSubscription{GroupID: arg.GroupID, Tier: arg.Tier, MemberLimit: arg.MemberLimit, TransactionCapacityPerPeriod: arg.TransactionCapacityPerPeriod, TransactionFeeBps: arg.TransactionFeeBps}, nil
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) {
+		if accessToken == "valid-access" {
+			return 42, nil
+		}
+		return 0, errors.New("bad token")
+	}}
+
+	router := newTestRouterWithDepsAndDefaults(svc, fake, GroupSubscriptionDefaults{
+		Tier:                         db.SubscriptionTierStarter,
+		MemberLimit:                  50,
+		TransactionCapacityPerPeriod: 1000,
+		TransactionFeeBps:            75,
+	})
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups", map[string]string{"name": "Team"}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
 	}
 }
 

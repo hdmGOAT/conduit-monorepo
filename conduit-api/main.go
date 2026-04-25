@@ -35,7 +35,12 @@ func main() {
 	resetEmailSender := email.NewResendSender(cfg.ResendAPIKey, cfg.ResendFromEmail)
 	authService := auth.NewService(queries, tokenManager, resetEmailSender, cfg.FrontendURL, cfg.PasswordResetTTL)
 	authHandler := api.NewAuthHandler(authService, cfg.CookieSecure, tokenManager.RefreshTTLSeconds())
-	groupsHandler := api.NewGroupsHandler(queries)
+	groupsHandler := api.NewGroupsHandler(queries, api.GroupSubscriptionDefaults{
+		Tier:                         db.SubscriptionTier(cfg.SubscriptionDefaultTier),
+		MemberLimit:                  cfg.SubscriptionDefaultMemberLimit,
+		TransactionCapacityPerPeriod: cfg.SubscriptionDefaultTransactionCapacityPerPeriod,
+		TransactionFeeBps:            cfg.SubscriptionDefaultTransactionFeeBps,
+	})
 	collectionsHandler := api.NewCollectionsHandler(queries)
 	paymentsHandler := api.NewPaymentsHandler(queries)
 	if cfg.StripeSecretKey != "" && cfg.StripeWebhookSecret != "" {

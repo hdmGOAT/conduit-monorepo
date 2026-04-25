@@ -5,6 +5,7 @@ CREATE TYPE payment_method AS ENUM ('stripe', 'cash');
 CREATE TYPE cash_payment_status AS ENUM ('pending', 'confirmed');
 CREATE TYPE outbox_status AS ENUM ('pending', 'processed');
 CREATE TYPE form_field_type AS ENUM ('text', 'textarea', 'number', 'date', 'select', 'checkbox', 'email', 'phone');
+CREATE TYPE subscription_tier AS ENUM ('free', 'starter', 'growth', 'enterprise');
 
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
@@ -143,6 +144,30 @@ CREATE TABLE password_reset_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE organization_subscriptions (
+    id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL UNIQUE REFERENCES groups(id) ON DELETE CASCADE,
+    tier subscription_tier NOT NULL DEFAULT 'free',
+    member_limit INTEGER NOT NULL,
+    transaction_capacity_per_period INTEGER NOT NULL,
+    transaction_fee_bps INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE subscription_usage_periods (
+    id BIGSERIAL PRIMARY KEY,
+    group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    period_start TIMESTAMPTZ NOT NULL,
+    period_end TIMESTAMPTZ NOT NULL,
+    transaction_count INTEGER NOT NULL DEFAULT 0,
+    gross_amount BIGINT NOT NULL DEFAULT 0,
+    fee_amount BIGINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (group_id, period_start)
+);
+
 CREATE INDEX idx_groups_owner_id ON groups(owner_id);
 CREATE INDEX idx_memberships_group_id ON memberships(group_id);
 CREATE INDEX idx_collections_group_id ON collections(group_id);
@@ -159,3 +184,5 @@ CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
 CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+CREATE INDEX idx_organization_subscriptions_group_id ON organization_subscriptions(group_id);
+CREATE INDEX idx_subscription_usage_periods_group_period ON subscription_usage_periods(group_id, period_start);

@@ -15,11 +15,31 @@ import (
 )
 
 type GroupsHandler struct {
-	db db.Querier
+	db                   db.Querier
+	subscriptionDefaults GroupSubscriptionDefaults
 }
 
-func NewGroupsHandler(dbq db.Querier) *GroupsHandler {
-	return &GroupsHandler{db: dbq}
+type GroupSubscriptionDefaults struct {
+	Tier                         db.SubscriptionTier
+	MemberLimit                  int32
+	TransactionCapacityPerPeriod int32
+	TransactionFeeBps            int32
+}
+
+var defaultGroupSubscriptionDefaults = GroupSubscriptionDefaults{
+	Tier:                         db.SubscriptionTierFree,
+	MemberLimit:                  25,
+	TransactionCapacityPerPeriod: 250,
+	TransactionFeeBps:            50,
+}
+
+func NewGroupsHandler(dbq db.Querier, defaults ...GroupSubscriptionDefaults) *GroupsHandler {
+	resolvedDefaults := defaultGroupSubscriptionDefaults
+	if len(defaults) > 0 {
+		resolvedDefaults = defaults[0]
+	}
+
+	return &GroupsHandler{db: dbq, subscriptionDefaults: resolvedDefaults}
 }
 
 type createGroupRequest struct {
@@ -55,6 +75,19 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 	_, err = h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{Column1: userID, Column2: grp.ID, Column3: db.MembershipRoleAdmin})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add creator membership"})
+		return
+	}
+
+	_, err = h.db.UpsertOrganizationSubscription(c.Request.Context(), db.UpsertOrganizationSubscriptionParams{
+		GroupID:                      grp.ID,
+		Tier:                         h.subscriptionDefaults.Tier,
+		MemberLimit:                  h.subscriptionDefaults.MemberLimit,
+		TransactionCapacityPerPeriod: h.subscriptionDefaults.TransactionCapacityPerPeriod,
+		TransactionFeeBps:            h.subscriptionDefaults.TransactionFeeBps,
+	})
+	if err != nil {
+		log.Printf("failed to initialize subscription for group %d: %v", grp.ID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize group subscription"})
 		return
 	}
 

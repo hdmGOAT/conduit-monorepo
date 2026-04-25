@@ -9,6 +9,7 @@ import (
 type fakeDB struct {
 	createGroupFn                       func(ctx context.Context, arg db.CreateGroupParams) (db.Group, error)
 	addMembershipFn                     func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error)
+	upsertOrganizationSubscriptionFn    func(ctx context.Context, arg db.UpsertOrganizationSubscriptionParams) (db.OrganizationSubscription, error)
 	listGroupMembershipsFn              func(ctx context.Context, groupID int64) ([]db.Membership, error)
 	listGroupsByOwnerFn                 func(ctx context.Context, ownerID int64) ([]db.Group, error)
 	createJoinRequestFn                 func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error)
@@ -65,6 +66,9 @@ func (f *fakeDB) CloseCollection(ctx context.Context, arg db.CloseCollectionPara
 func (f *fakeDB) ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error) {
 	return 0, nil
 }
+func (f *fakeDB) CountMembersByGroup(ctx context.Context, groupID int64) (int64, error) {
+	return 0, nil
+}
 func (f *fakeDB) CreateCollection(ctx context.Context, arg db.CreateCollectionParams) (db.Collection, error) {
 	if f.createCollectionFn != nil {
 		return f.createCollectionFn(ctx, arg)
@@ -107,6 +111,9 @@ func (f *fakeDB) CreatePayment(ctx context.Context, arg db.CreatePaymentParams) 
 func (f *fakeDB) CreateRefreshToken(ctx context.Context, arg db.CreateRefreshTokenParams) (db.RefreshToken, error) {
 	return db.RefreshToken{}, nil
 }
+func (f *fakeDB) CreateUsagePeriod(ctx context.Context, arg db.CreateUsagePeriodParams) (db.SubscriptionUsagePeriod, error) {
+	return db.SubscriptionUsagePeriod{}, nil
+}
 func (f *fakeDB) CreateUser(ctx context.Context, email string) (db.User, error) {
 	return db.User{}, nil
 }
@@ -119,8 +126,14 @@ func (f *fakeDB) GetCollectionFormByCollectionID(ctx context.Context, collection
 	}
 	return db.CollectionForm{}, nil
 }
+func (f *fakeDB) GetOrganizationSubscriptionByGroup(ctx context.Context, groupID int64) (db.OrganizationSubscription, error) {
+	return db.OrganizationSubscription{}, nil
+}
 func (f *fakeDB) GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (db.RefreshToken, error) {
 	return db.RefreshToken{}, nil
+}
+func (f *fakeDB) GetUsagePeriodByGroupAndStart(ctx context.Context, arg db.GetUsagePeriodByGroupAndStartParams) (db.SubscriptionUsagePeriod, error) {
+	return db.SubscriptionUsagePeriod{}, nil
 }
 func (f *fakeDB) GetUserByEmail(ctx context.Context, email string) (db.User, error) {
 	return db.User{}, nil
@@ -239,6 +252,9 @@ func (f *fakeDB) MarkPaymentPaid(ctx context.Context, id int64) (db.Payment, err
 	}
 	return db.Payment{}, nil
 }
+func (f *fakeDB) IncrementUsageForPayment(ctx context.Context, arg db.IncrementUsageForPaymentParams) (db.SubscriptionUsagePeriod, error) {
+	return db.SubscriptionUsagePeriod{}, nil
+}
 func (f *fakeDB) RevokeRefreshToken(ctx context.Context, tokenID string) error       { return nil }
 func (f *fakeDB) RevokeRefreshTokensForUser(ctx context.Context, userID int64) error { return nil }
 func (f *fakeDB) UpdateUserPasswordHash(ctx context.Context, arg db.UpdateUserPasswordHashParams) error {
@@ -341,4 +357,11 @@ func (f *fakeDB) AddFormAnswer(ctx context.Context, arg db.AddFormAnswerParams) 
 		return f.addFormAnswerFn(ctx, arg)
 	}
 	return db.CollectionFormAnswer{}, nil
+}
+
+func (f *fakeDB) UpsertOrganizationSubscription(ctx context.Context, arg db.UpsertOrganizationSubscriptionParams) (db.OrganizationSubscription, error) {
+	if f.upsertOrganizationSubscriptionFn != nil {
+		return f.upsertOrganizationSubscriptionFn(ctx, arg)
+	}
+	return db.OrganizationSubscription{}, nil
 }
