@@ -12,16 +12,18 @@ import (
 )
 
 const createPayment = `-- name: CreatePayment :one
-INSERT INTO payments (user_id, collection_id, amount, method, stripe_payment_intent_id)
-VALUES ($1, $2, $3, $4::payment_method, $5)
-RETURNING id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+INSERT INTO payments (user_id, collection_id, base_amount, fee_amount, total_amount, method, stripe_payment_intent_id)
+VALUES ($1, $2, $3, $4, $5, $6::payment_method, $7)
+RETURNING id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 `
 
 type CreatePaymentParams struct {
 	UserID                int64         `json:"user_id"`
 	CollectionID          int64         `json:"collection_id"`
-	Amount                int64         `json:"amount"`
-	Column4               PaymentMethod `json:"column_4"`
+	BaseAmount            int64         `json:"base_amount"`
+	FeeAmount             int64         `json:"fee_amount"`
+	TotalAmount           int64         `json:"total_amount"`
+	Column6               PaymentMethod `json:"column_6"`
 	StripePaymentIntentID pgtype.Text   `json:"stripe_payment_intent_id"`
 }
 
@@ -29,8 +31,10 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 	row := q.db.QueryRow(ctx, createPayment,
 		arg.UserID,
 		arg.CollectionID,
-		arg.Amount,
-		arg.Column4,
+		arg.BaseAmount,
+		arg.FeeAmount,
+		arg.TotalAmount,
+		arg.Column6,
 		arg.StripePaymentIntentID,
 	)
 	var i Payment
@@ -38,7 +42,9 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 		&i.ID,
 		&i.UserID,
 		&i.CollectionID,
-		&i.Amount,
+		&i.BaseAmount,
+		&i.FeeAmount,
+		&i.TotalAmount,
 		&i.Status,
 		&i.Method,
 		&i.StripePaymentIntentID,
@@ -48,7 +54,7 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (P
 }
 
 const getPaymentByStripePaymentIntentID = `-- name: GetPaymentByStripePaymentIntentID :one
-SELECT id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+SELECT id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 FROM payments
 WHERE stripe_payment_intent_id = $1::text
 LIMIT 1
@@ -61,7 +67,9 @@ func (q *Queries) GetPaymentByStripePaymentIntentID(ctx context.Context, stripeP
 		&i.ID,
 		&i.UserID,
 		&i.CollectionID,
-		&i.Amount,
+		&i.BaseAmount,
+		&i.FeeAmount,
+		&i.TotalAmount,
 		&i.Status,
 		&i.Method,
 		&i.StripePaymentIntentID,
@@ -71,7 +79,7 @@ func (q *Queries) GetPaymentByStripePaymentIntentID(ctx context.Context, stripeP
 }
 
 const listPaymentsByCollection = `-- name: ListPaymentsByCollection :many
-SELECT id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+SELECT id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 FROM payments
 WHERE collection_id = $1
 ORDER BY id DESC
@@ -90,7 +98,9 @@ func (q *Queries) ListPaymentsByCollection(ctx context.Context, collectionID int
 			&i.ID,
 			&i.UserID,
 			&i.CollectionID,
-			&i.Amount,
+			&i.BaseAmount,
+			&i.FeeAmount,
+			&i.TotalAmount,
 			&i.Status,
 			&i.Method,
 			&i.StripePaymentIntentID,
@@ -111,7 +121,7 @@ UPDATE payments
 SET status = 'failed'
 WHERE id = $1
 	AND status = 'pending'
-RETURNING id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+RETURNING id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 `
 
 func (q *Queries) MarkPaymentFailed(ctx context.Context, id int64) (Payment, error) {
@@ -121,7 +131,9 @@ func (q *Queries) MarkPaymentFailed(ctx context.Context, id int64) (Payment, err
 		&i.ID,
 		&i.UserID,
 		&i.CollectionID,
-		&i.Amount,
+		&i.BaseAmount,
+		&i.FeeAmount,
+		&i.TotalAmount,
 		&i.Status,
 		&i.Method,
 		&i.StripePaymentIntentID,
@@ -135,7 +147,7 @@ UPDATE payments
 SET status = 'paid'
 WHERE id = $1
 	AND status = 'pending'
-RETURNING id, user_id, collection_id, amount, status, method, stripe_payment_intent_id, created_at
+RETURNING id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 `
 
 func (q *Queries) MarkPaymentPaid(ctx context.Context, id int64) (Payment, error) {
@@ -145,7 +157,9 @@ func (q *Queries) MarkPaymentPaid(ctx context.Context, id int64) (Payment, error
 		&i.ID,
 		&i.UserID,
 		&i.CollectionID,
-		&i.Amount,
+		&i.BaseAmount,
+		&i.FeeAmount,
+		&i.TotalAmount,
 		&i.Status,
 		&i.Method,
 		&i.StripePaymentIntentID,

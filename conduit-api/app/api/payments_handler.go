@@ -51,7 +51,10 @@ func paymentResponse(payment db.Payment, stripeIntent *stripePaymentIntent) gin.
 		"id":                       payment.ID,
 		"user_id":                  payment.UserID,
 		"collection_id":            payment.CollectionID,
-		"amount":                   payment.Amount,
+		"amount":                   payment.TotalAmount,
+		"base_amount":              payment.BaseAmount,
+		"fee_amount":               payment.FeeAmount,
+		"total_amount":             payment.TotalAmount,
 		"status":                   payment.Status,
 		"method":                   payment.Method,
 		"stripe_payment_intent_id": textToInterface(payment.StripePaymentIntentID),
@@ -95,6 +98,16 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		return
 	}
 
+	subscription, err := h.db.GetOrganizationSubscriptionByGroup(c.Request.Context(), collection.GroupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load subscription"})
+		return
+	}
+
+	baseAmount := collection.Amount
+	feeAmount := calculateFeeAmount(baseAmount, subscription.TransactionFeeBps)
+	totalAmount := baseAmount + feeAmount
+
 	var req createPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondValidationError(c, err)
@@ -109,10 +122,13 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 			return
 		}
 
-		stripeIntent, err = h.stripe.CreatePaymentIntent(c.Request.Context(), collection.Amount, map[string]string{
+		stripeIntent, err = h.stripe.CreatePaymentIntent(c.Request.Context(), totalAmount, map[string]string{
 			"collection_id": strconv.FormatInt(collection.ID, 10),
 			"user_id":       strconv.FormatInt(callerID, 10),
-			"amount":        strconv.FormatInt(collection.Amount, 10),
+			"amount":        strconv.FormatInt(totalAmount, 10),
+			"base_amount":   strconv.FormatInt(baseAmount, 10),
+			"fee_amount":    strconv.FormatInt(feeAmount, 10),
+			"total_amount":  strconv.FormatInt(totalAmount, 10),
 		})
 		if err != nil {
 			if errors.Is(err, errStripeNotConfigured) {
@@ -133,11 +149,6 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 
 	var payment db.Payment
 	err = runWithinTx(c.Request.Context(), h.db, func(q db.Querier) error {
-		subscription, err := q.GetOrganizationSubscriptionByGroup(c.Request.Context(), collection.GroupID)
-		if err != nil {
-			return err
-		}
-
 		periodStart, periodEnd := billingPeriodBounds(time.Now().UTC())
 		usage, err := q.GetUsagePeriodByGroupAndStart(c.Request.Context(), db.GetUsagePeriodByGroupAndStartParams{GroupID: collection.GroupID, PeriodStart: periodStart})
 		if err != nil {
@@ -168,8 +179,10 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 		payment, err = q.CreatePayment(c.Request.Context(), db.CreatePaymentParams{
 			UserID:                callerID,
 			CollectionID:          collection.ID,
-			Amount:                collection.Amount,
-			Column4:               method,
+			BaseAmount:            baseAmount,
+			FeeAmount:             feeAmount,
+			TotalAmount:           totalAmount,
+			Column6:               method,
 			StripePaymentIntentID: stripePaymentIntentID,
 		})
 		if err != nil {
@@ -180,8 +193,8 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 			GroupID:          collection.GroupID,
 			PeriodStart:      usage.PeriodStart,
 			TransactionCount: 1,
-			GrossAmount:      collection.Amount,
-			FeeAmount:        calculateFeeAmount(collection.Amount, subscription.TransactionFeeBps),
+			GrossAmount:      baseAmount,
+			FeeAmount:        feeAmount,
 		})
 		return err
 	})

@@ -1,6 +1,6 @@
 -- name: CreatePayment :one
-INSERT INTO payments (user_id, collection_id, amount, method, stripe_payment_intent_id)
-VALUES ($1, $2, $3, $4::payment_method, $5)
+INSERT INTO payments (user_id, collection_id, base_amount, fee_amount, total_amount, method, stripe_payment_intent_id)
+VALUES ($1, $2, $3, $4, $5, $6::payment_method, $7)
 RETURNING *;
 
 -- name: MarkPaymentPaid :one
