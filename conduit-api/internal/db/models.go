@@ -357,6 +357,50 @@ func (ns NullPaymentStatus) Value() (driver.Value, error) {
 	return string(ns.PaymentStatus), nil
 }
 
+type SubscriptionTier string
+
+const (
+	SubscriptionTierFree       SubscriptionTier = "free"
+	SubscriptionTierStarter    SubscriptionTier = "starter"
+	SubscriptionTierGrowth     SubscriptionTier = "growth"
+	SubscriptionTierEnterprise SubscriptionTier = "enterprise"
+)
+
+func (e *SubscriptionTier) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SubscriptionTier(s)
+	case string:
+		*e = SubscriptionTier(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SubscriptionTier: %T", src)
+	}
+	return nil
+}
+
+type NullSubscriptionTier struct {
+	SubscriptionTier SubscriptionTier `json:"subscription_tier"`
+	Valid            bool             `json:"valid"` // Valid is true if SubscriptionTier is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSubscriptionTier) Scan(value interface{}) error {
+	if value == nil {
+		ns.SubscriptionTier, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SubscriptionTier.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSubscriptionTier) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SubscriptionTier), nil
+}
+
 type CashPayment struct {
 	ID          int64              `json:"id"`
 	PaymentID   int64              `json:"payment_id"`
@@ -437,6 +481,17 @@ type Membership struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type OrganizationSubscription struct {
+	ID                           int64              `json:"id"`
+	GroupID                      int64              `json:"group_id"`
+	Tier                         SubscriptionTier   `json:"tier"`
+	MemberLimit                  int32              `json:"member_limit"`
+	TransactionCapacityPerPeriod int32              `json:"transaction_capacity_per_period"`
+	TransactionFeeBps            int32              `json:"transaction_fee_bps"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type OutboxEvent struct {
 	ID          int64              `json:"id"`
 	EventType   string             `json:"event_type"`
@@ -475,6 +530,18 @@ type RefreshToken struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type SubscriptionUsagePeriod struct {
+	ID               int64              `json:"id"`
+	GroupID          int64              `json:"group_id"`
+	PeriodStart      pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd        pgtype.Timestamptz `json:"period_end"`
+	TransactionCount int32              `json:"transaction_count"`
+	GrossAmount      int64              `json:"gross_amount"`
+	FeeAmount        int64              `json:"fee_amount"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

@@ -13,6 +13,7 @@ type Querier interface {
 	AddMembership(ctx context.Context, arg AddMembershipParams) (Membership, error)
 	CloseCollection(ctx context.Context, arg CloseCollectionParams) (Collection, error)
 	ConsumePasswordResetToken(ctx context.Context, tokenHash string) (int64, error)
+	CountMembersByGroup(ctx context.Context, groupID int64) (int64, error)
 	CreateCollection(ctx context.Context, arg CreateCollectionParams) (Collection, error)
 	CreateCollectionForm(ctx context.Context, arg CreateCollectionFormParams) (CollectionForm, error)
 	CreateCollectionFormField(ctx context.Context, arg CreateCollectionFormFieldParams) (CollectionFormField, error)
@@ -22,6 +23,7 @@ type Querier interface {
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
 	CreatePayment(ctx context.Context, arg CreatePaymentParams) (Payment, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (RefreshToken, error)
+	CreateUsagePeriod(ctx context.Context, arg CreateUsagePeriodParams) (SubscriptionUsagePeriod, error)
 	CreateUser(ctx context.Context, email string) (User, error)
 	CreateUserCredential(ctx context.Context, arg CreateUserCredentialParams) (User, error)
 	DeleteCollection(ctx context.Context, arg DeleteCollectionParams) (Collection, error)
@@ -36,11 +38,14 @@ type Querier interface {
 	GetFormAnswerByID(ctx context.Context, id int64) (CollectionFormAnswer, error)
 	GetFormSubmissionByID(ctx context.Context, id int64) (CollectionFormSubmission, error)
 	GetGroupByID(ctx context.Context, id int64) (Group, error)
+	GetOrganizationSubscriptionByGroup(ctx context.Context, groupID int64) (OrganizationSubscription, error)
 	GetPaymentByStripePaymentIntentID(ctx context.Context, stripePaymentIntentID string) (Payment, error)
 	GetRefreshTokenByTokenID(ctx context.Context, tokenID string) (RefreshToken, error)
+	GetUsagePeriodByGroupAndStart(ctx context.Context, arg GetUsagePeriodByGroupAndStartParams) (SubscriptionUsagePeriod, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserCredentialByEmail(ctx context.Context, email string) (User, error)
+	IncrementUsageForPayment(ctx context.Context, arg IncrementUsageForPaymentParams) (SubscriptionUsagePeriod, error)
 	ListCollectionFormFields(ctx context.Context, formID int64) ([]CollectionFormField, error)
 	ListCollectionsByGroup(ctx context.Context, groupID int64) ([]Collection, error)
 	ListFormAnswersBySubmission(ctx context.Context, submissionID int64) ([]CollectionFormAnswer, error)
@@ -64,6 +69,7 @@ type Querier interface {
 	UpdateJoinRequestStatus(ctx context.Context, arg UpdateJoinRequestStatusParams) (JoinRequest, error)
 	UpdateMembership(ctx context.Context, arg UpdateMembershipParams) (Membership, error)
 	UpdateUserPasswordHash(ctx context.Context, arg UpdateUserPasswordHashParams) error
+	UpsertOrganizationSubscription(ctx context.Context, arg UpsertOrganizationSubscriptionParams) (OrganizationSubscription, error)
 }
 
 var _ Querier = (*Queries)(nil)
