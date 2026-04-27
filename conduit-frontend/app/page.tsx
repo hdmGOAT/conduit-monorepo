@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Fraunces, Space_Grotesk } from "next/font/google";
 
 const fraunces = Fraunces({
@@ -32,13 +31,22 @@ export default function Home() {
               Conduit
             </a>
             <div className="hidden items-center gap-8 text-sm font-semibold md:flex">
-              <a href="#features" className="transition-colors hover:text-[#0f6f61]">
+              <a
+                href="#features"
+                className="transition-colors hover:text-[#0f6f61]"
+              >
                 Features
               </a>
-              <a href="#proof" className="transition-colors hover:text-[#0f6f61]">
+              <a
+                href="#proof"
+                className="transition-colors hover:text-[#0f6f61]"
+              >
                 Proof
               </a>
-              <a href="#pricing" className="transition-colors hover:text-[#0f6f61]">
+              <a
+                href="#pricing"
+                className="transition-colors hover:text-[#0f6f61]"
+              >
                 Pricing
               </a>
             </div>
@@ -49,7 +57,7 @@ export default function Home() {
         </header>
 
         <section className="relative overflow-hidden">
-          <div className="hero-ring absolute -right-30 top-20 hidden lg:block" />
+          <div className="hero-ring absolute right-[-120px] top-[80px] hidden lg:block" />
           <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-5 pb-20 pt-14 sm:px-8 lg:grid-cols-2 lg:pb-28 lg:pt-24">
             <div>
               <p className="float-in inline-flex items-center gap-2 rounded-full border border-[#122038]/10 bg-[#122038]/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em]">
@@ -58,8 +66,9 @@ export default function Home() {
               <h1
                 className={`${fraunces.className} float-in delay-1 mt-5 text-5xl leading-[1.02] sm:text-6xl lg:text-7xl`}
               >
-                Run your community <span className="text-[#0f6f61]">like a product</span>,
-                and grow like media.
+                Run your community{" "}
+                <span className="text-[#0f6f61]">like a product</span>, and grow
+                like media.
               </h1>
               <p className="float-in delay-2 mt-6 max-w-xl text-lg leading-relaxed text-[#122038]/80">
                 Conduit gives creators one place for memberships, gated content,
@@ -76,10 +85,12 @@ export default function Home() {
               </div>
               <div className="mt-10 flex flex-wrap items-center gap-6 text-sm text-[#122038]/70">
                 <p>
-                  <span className="font-semibold text-[#122038]">4.9/5</span> user rating
+                  <span className="font-semibold text-[#122038]">4.9/5</span>{" "}
+                  user rating
                 </p>
                 <p>
-                  <span className="font-semibold text-[#122038]">2,100+</span> creators onboarded
+                  <span className="font-semibold text-[#122038]">2,100+</span>{" "}
+                  creators onboarded
                 </p>
               </div>
             </div>
@@ -93,12 +104,18 @@ export default function Home() {
                   <div className="mt-5 grid grid-cols-2 gap-4">
                     <div className="rounded-xl bg-[#f8f7f2]/10 p-4">
                       <p className="text-xs text-[#f8f7f2]/70">MRR</p>
-                      <p className={`${fraunces.className} mt-1 text-3xl`}>$18.4k</p>
-                      <p className="mt-2 text-xs text-[#dff1ec]">+22% this month</p>
+                      <p className={`${fraunces.className} mt-1 text-3xl`}>
+                        $18.4k
+                      </p>
+                      <p className="mt-2 text-xs text-[#dff1ec]">
+                        +22% this month
+                      </p>
                     </div>
                     <div className="rounded-xl bg-[#f8f7f2]/10 p-4">
                       <p className="text-xs text-[#f8f7f2]/70">Retention</p>
-                      <p className={`${fraunces.className} mt-1 text-3xl`}>94%</p>
+                      <p className={`${fraunces.className} mt-1 text-3xl`}>
+                        94%
+                      </p>
                       <p className="mt-2 text-xs text-[#dff1ec]">up from 88%</p>
                     </div>
                   </div>
@@ -108,13 +125,17 @@ export default function Home() {
                     <p className="text-xs uppercase tracking-[0.14em] text-[#122038]/60">
                       Automations
                     </p>
-                    <p className="mt-2 text-base font-semibold">Smart welcome flows</p>
+                    <p className="mt-2 text-base font-semibold">
+                      Smart welcome flows
+                    </p>
                   </article>
                   <article className="rounded-2xl border border-[#122038]/10 bg-[#f8f7f2] p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-[#122038]/60">
                       Payments
                     </p>
-                    <p className="mt-2 text-base font-semibold">Secure global checkout</p>
+                    <p className="mt-2 text-base font-semibold">
+                      Secure global checkout
+                    </p>
                   </article>
                 </div>
               </div>
@@ -122,7 +143,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="proof" className="overflow-hidden border-y border-[#122038]/10 bg-[#f8f7f2]/70 py-5">
+        <section
+          id="proof"
+          className="overflow-hidden border-y border-[#122038]/10 bg-[#f8f7f2]/70 py-5"
+        >
           <div className="ticker-track flex w-max gap-12 text-sm font-semibold uppercase tracking-[0.16em] text-[#122038]/60">
             <span>Trusted by creator schools</span>
             <span>Used by premium communities</span>
@@ -137,9 +161,14 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="features" className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 lg:py-24">
+        <section
+          id="features"
+          className="mx-auto w-full max-w-6xl px-5 py-20 sm:px-8 lg:py-24"
+        >
           <div className="max-w-2xl">
-            <h2 className={`${fraunces.className} text-4xl leading-tight sm:text-5xl`}>
+            <h2
+              className={`${fraunces.className} text-4xl leading-tight sm:text-5xl`}
+            >
               Everything you need to run a paid community without the chaos.
             </h2>
           </div>
@@ -149,7 +178,9 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f6f61]">
                 Monetization
               </p>
-              <h3 className={`${fraunces.className} mt-3 text-3xl`}>Flexible plans</h3>
+              <h3 className={`${fraunces.className} mt-3 text-3xl`}>
+                Flexible plans
+              </h3>
               <p className="mt-3 text-[#122038]/75">
                 Offer monthly, annual, and one-time tiers with promo support and
                 automatic receipts.
@@ -160,10 +191,12 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f6f61]">
                 Control
               </p>
-              <h3 className={`${fraunces.className} mt-3 text-3xl`}>Fine-grained access</h3>
+              <h3 className={`${fraunces.className} mt-3 text-3xl`}>
+                Fine-grained access
+              </h3>
               <p className="mt-3 text-[#122038]/75">
-                Grant content access by role, plan, or collection. Keep your best
-                work exclusive.
+                Grant content access by role, plan, or collection. Keep your
+                best work exclusive.
               </p>
             </article>
 
@@ -171,10 +204,12 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f6f61]">
                 Insights
               </p>
-              <h3 className={`${fraunces.className} mt-3 text-3xl`}>Actionable analytics</h3>
+              <h3 className={`${fraunces.className} mt-3 text-3xl`}>
+                Actionable analytics
+              </h3>
               <p className="mt-3 text-[#122038]/75">
-                Track churn signals, conversion cohorts, and plan upgrades in one
-                clean dashboard.
+                Track churn signals, conversion cohorts, and plan upgrades in
+                one clean dashboard.
               </p>
             </article>
           </div>
@@ -184,13 +219,17 @@ export default function Home() {
           <div className="mx-auto w-full max-w-6xl rounded-[2rem] border border-[#122038]/10 bg-[#122038] p-7 text-[#f8f7f2] sm:p-10 lg:p-12">
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="lg:col-span-2">
-                <p className="text-xs uppercase tracking-[0.16em] text-[#f8f7f2]/70">Pricing</p>
-                <h2 className={`${fraunces.className} mt-3 text-4xl sm:text-5xl`}>
+                <p className="text-xs uppercase tracking-[0.16em] text-[#f8f7f2]/70">
+                  Pricing
+                </p>
+                <h2
+                  className={`${fraunces.className} mt-3 text-4xl sm:text-5xl`}
+                >
                   Start free. Scale when your members do.
                 </h2>
                 <p className="mt-4 max-w-2xl text-[#f8f7f2]/80">
-                  No setup fee. No weird add-ons. Just transparent pricing designed
-                  for community operators.
+                  No setup fee. No weird add-ons. Just transparent pricing
+                  designed for community operators.
                 </p>
               </div>
               <div className="rounded-3xl bg-[#f8f7f2] p-6 text-[#122038]">
@@ -214,12 +253,14 @@ export default function Home() {
 
         <section className="mx-auto w-full max-w-6xl px-5 pb-20 sm:px-8">
           <div className="rounded-[2rem] border border-[#122038]/10 bg-[#f8f7f2]/70 p-8 text-center sm:p-10">
-            <h2 className={`${fraunces.className} text-4xl leading-tight sm:text-5xl`}>
+            <h2
+              className={`${fraunces.className} text-4xl leading-tight sm:text-5xl`}
+            >
               Your members are waiting.
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-[#122038]/75">
-              Build your premium community in days, not months. Invite your first
-              cohort and run everything from one command center.
+              Build your premium community in days, not months. Invite your
+              first cohort and run everything from one command center.
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <button className="rounded-xl bg-[#ef6d4c] px-7 py-3.5 font-semibold text-white transition-all hover:brightness-95">
@@ -228,21 +269,6 @@ export default function Home() {
               <button className="rounded-xl border border-[#122038]/20 px-7 py-3.5 font-semibold transition-colors hover:bg-[#f8f7f2]">
                 Book a Demo
               </button>
-            </div>
-
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <Link
-                href="/forgot-password"
-                className="rounded-xl bg-[#122038] px-4 py-3 text-center text-sm font-medium text-white transition hover:bg-[#0f6f61]"
-              >
-                Forgot password
-              </Link>
-              <Link
-                href="/reset-password"
-                className="rounded-xl border border-[#122038]/25 px-4 py-3 text-center text-sm font-medium text-[#122038] transition hover:border-[#122038]/45"
-              >
-                Reset password
-              </Link>
             </div>
           </div>
         </section>
@@ -264,7 +290,6 @@ export default function Home() {
           </div>
         </footer>
       </div>
-
     </main>
   );
 }
