@@ -1,11 +1,8 @@
 import { Fraunces, Space_Grotesk } from "next/font/google";
+import Link from "next/link";
+import { Button } from "@/components/button";
 
 const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const poppins = Space_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -29,15 +26,28 @@ export default function Home() {
       <div className="relative z-10">
         <header className="sticky top-0 z-30 border-b border-ink/10 bg-cloud/95 backdrop-blur-xl">
           <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-            <a
-              href="#"
+            <Link
+              href="/"
               className={`${fraunces.className} text-3xl font-semibold tracking-tight`}
             >
               Conduit
-            </a>
-            <button className="rounded-full border border-ink/20 bg-cloud px-10 py-2.5 text-base font-medium text-ink transition-all hover:bg-[#344873] hover:text-stone-100 active:scale-[0.98] active:bg-forest active:text-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30">
+            </Link>
+            <div className="flex items-center gap-3">
+              <Button
+                href="/login"
+                variant="nav-primary"
+                size="sm"
+              >
+                Log In
+              </Button>
+              <Button
+                href="/signup"
+                variant="nav-secondary"
+                size="sm"
+              >
               Sign Up
-            </button>
+              </Button>
+            </div>
           </nav>
         </header>
 
@@ -63,12 +73,20 @@ export default function Home() {
                     forms, share updates, and keep operations in sync.
                   </p>
                   <div className="float-in delay-3 mt-9 flex flex-col gap-4 sm:flex-row">
-                    <button className="rounded-xl border border-ink/20 bg-ink px-7 py-3.5 font-semibold text-cloud transition-all hover:bg-[#0b1f4b] hover:text-stone-100 ">
+                    <Button
+                      href="/signup"
+                      variant="primary"
+                      size="md"
+                    >
                       Start My Group
-                    </button>
-                    <button className="rounded-xl bg-[#0b1f4b] px-7 py-3.5 font-semibold text-stone-100 transition-colors hover:bg-[#172850]">
-                      Learn More
-                    </button>
+                    </Button>
+                    <Button
+                      href="/login"
+                      variant="secondary"
+                      size="md"
+                    >
+                      Log In
+                    </Button>
                   </div>
                   <div className="mt-10 flex items-center gap-6 text-base text-ink/75">
                     <p>
@@ -159,9 +177,13 @@ export default function Home() {
                 handle your payments all in one place.
               </p>
               <div className="mt-8 flex justify-center gap-4">
-                <button className="rounded-xl border border-ink/25 bg-ember px-10 py-5 font-semibold text-xl text-ink transition-all hover:bg-[#344873] hover:text-stone-100">
+                <Button
+                  href="/signup"
+                  variant="tertiary"
+                  size="lg"
+                >
                   Create An Account
-                </button>
+                </Button>
               </div>
             </div>
           </section>
