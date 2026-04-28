@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import appAPIClient from "@/lib/api/httpClient";
 import { getAPIErrorMessage } from "@/lib/api/httpError";
-import { AuthField, AuthInlineLink } from "@/components/auth/auth-field";
+import { AuthField } from "@/components/auth/auth-field";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { AuthSubmitButton } from "@/components/auth/auth-submit-button";
-import { loginSchema } from "@/lib/validators/auth";
+import { signupSchema } from "@/lib/validators/auth";
 
-export default function LoginPage() {
+export default function SignupPage() {
   const router = useRouter();
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -23,7 +25,13 @@ export default function LoginPage() {
     setFieldErrors({});
     setError(null);
 
-    const result = loginSchema.safeParse({ email, password });
+    const result = signupSchema.safeParse({
+      displayName,
+      email,
+      password,
+      confirmPassword,
+    });
+
     if (!result.success) {
       const fieldErrors = result.error.flatten().fieldErrors;
       const errors: Record<string, string> = {};
@@ -37,13 +45,15 @@ export default function LoginPage() {
     }
 
     setSubmitting(true);
-
     try {
-      await appAPIClient.post("/auth/login", { email, password });
-
+      await appAPIClient.post("/auth/signup", {
+        email,
+        password,
+        display_name: displayName,
+      });
       router.push("/");
     } catch (error) {
-      setError(getAPIErrorMessage(error, "Unable to reach the server. Try again."));
+      setError(getAPIErrorMessage(error, "Unable to create account. Try again."));
     } finally {
       setSubmitting(false);
     }
@@ -51,18 +61,18 @@ export default function LoginPage() {
 
   return (
     <AuthShell
-      eyebrow="Welcome"
-      title="Sign in to Conduit"
-      description="Use your account email and password to continue."
+      eyebrow="Join Conduit"
+      title="Create your account"
+      description="Set up your account to start creating groups and collecting payments."
       exitHref="/"
       footer={
         <div className="text-center text-sm text-[#122038]/70">
-          <span>Need an account? </span>
+          <span>Already have an account? </span>
           <Link
-            href="/signup"
+            href="/login"
             className="font-semibold text-[#122038] underline-offset-4 hover:underline"
           >
-            Sign Up
+            Sign In
           </Link>
         </div>
       }
@@ -74,6 +84,18 @@ export default function LoginPage() {
       ) : null}
 
       <form className="space-y-5" onSubmit={onSubmit}>
+        <AuthField
+          label="Display Name"
+          id="display-name"
+          name="display-name"
+          type="text"
+          required
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+          placeholder="Conduit Curator"
+          error={fieldErrors.displayName}
+        />
+
         <AuthField
           label="Email"
           id="email"
@@ -92,16 +114,28 @@ export default function LoginPage() {
           id="password"
           name="password"
           type="password"
-          autoComplete="current-password"
+          autoComplete="new-password"
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="••••••••"
-          trailingContent={<AuthInlineLink href="/forgot-password" label="Forgot Password?" />}
+          placeholder="At least 8 characters"
           error={fieldErrors.password}
         />
 
-        <AuthSubmitButton submitting={submitting} idleLabel="Sign In" busyLabel="Signing In..." />
+        <AuthField
+          label="Confirm Password"
+          id="confirm-password"
+          name="confirm-password"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          placeholder="Repeat your password"
+          error={fieldErrors.confirmPassword}
+        />
+
+        <AuthSubmitButton submitting={submitting} idleLabel="Create Account" busyLabel="Creating Account..." />
       </form>
     </AuthShell>
   );

@@ -3,20 +3,25 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useMemo, useState } from "react";
-
-type APIError = {
-  error?: string;
-};
+import appAPIClient from "@/lib/api/httpClient";
+import { getAPIErrorMessage } from "@/lib/api/httpError";
+import { AuthField } from "@/components/auth/auth-field";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { AuthSubmitButton } from "@/components/auth/auth-submit-button";
+import { resetPasswordSchema } from "@/lib/validators/auth";
 
 export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-gradient-to-b from-zinc-100 via-white to-zinc-200 px-4 py-20">
-          <div className="mx-auto w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-300/40">
-            <p className="text-sm text-zinc-600">Loading reset form...</p>
-          </div>
-        </main>
+        <AuthShell
+          eyebrow="Recover Access"
+          title="Reset your password"
+          description="Use your reset token and choose a new password to continue."
+          exitHref="/"
+        >
+          <div className="text-sm text-[#122038]/70">Loading reset form...</div>
+        </AuthShell>
       }
     >
       <ResetPasswordForm />
@@ -34,130 +39,117 @@ function ResetPasswordForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setFieldErrors({});
     setError(null);
 
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
+    const result = resetPasswordSchema.safeParse({
+      token,
+      newPassword,
+      confirmPassword,
+    });
+
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      const errors: Record<string, string> = {};
+      Object.entries(fieldErrors).forEach(([field, messages]) => {
+        if (messages?.[0]) {
+          errors[field] = messages[0];
+        }
+      });
+      setFieldErrors(errors);
       return;
     }
 
     setSubmitting(true);
     try {
-      const response = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          token,
-          new_password: newPassword,
-        }),
+      await appAPIClient.post("/auth/reset-password", {
+        token,
+        new_password: newPassword,
       });
-
-      if (!response.ok) {
-        let message = "Could not reset password";
-        const payload = (await response.json().catch(() => null)) as APIError | null;
-        if (payload?.error) {
-          message = payload.error;
-        }
-        setError(message);
-        return;
-      }
 
       setSuccess(true);
       setToken("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch {
-      setError("Unable to reach the server. Try again.");
+    } catch (error) {
+      setError(getAPIErrorMessage(error, "Unable to reach the server. Try again."));
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-zinc-100 via-white to-zinc-200 px-4 py-20">
-      <div className="mx-auto w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-xl shadow-zinc-300/40">
-        <p className="mb-2 text-xs uppercase tracking-[0.25em] text-zinc-500">Conduit</p>
-        <h1 className="text-2xl font-semibold text-zinc-900">Reset Password</h1>
-        <p className="mt-2 text-sm text-zinc-600">
-          Enter your reset token and choose a new password.
-        </p>
-
-        {success ? (
-          <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-            Password reset successful.
-          </div>
-        ) : null}
-
-        {error ? (
-          <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-            {error}
-          </div>
-        ) : null}
-
-        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="token">
-            Reset token
-          </label>
-          <input
-            id="token"
-            name="token"
-            required
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-            className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-zinc-900 outline-none ring-0 transition focus:border-zinc-500"
-            placeholder="Paste token"
-          />
-
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="new-password">
-            New password
-          </label>
-          <input
-            id="new-password"
-            name="new-password"
-            type="password"
-            minLength={8}
-            required
-            value={newPassword}
-            onChange={(event) => setNewPassword(event.target.value)}
-            className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-zinc-900 outline-none ring-0 transition focus:border-zinc-500"
-            placeholder="At least 8 characters"
-          />
-
-          <label className="block text-sm font-medium text-zinc-700" htmlFor="confirm-password">
-            Confirm password
-          </label>
-          <input
-            id="confirm-password"
-            name="confirm-password"
-            type="password"
-            minLength={8}
-            required
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-            className="w-full rounded-xl border border-zinc-300 px-3 py-2 text-zinc-900 outline-none ring-0 transition focus:border-zinc-500"
-            placeholder="Repeat password"
-          />
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {submitting ? "Resetting..." : "Reset Password"}
-          </button>
-        </form>
-
-        <div className="mt-6 text-sm text-zinc-600">
-          <Link href="/" className="text-zinc-900 underline underline-offset-4">
-            Back to home
+    <AuthShell
+      eyebrow="Recover Access"
+      title="Reset your password"
+      description="Use your reset token and choose a new password to continue."
+      exitHref="/"
+      footer={
+        <div className="flex items-center justify-center gap-4 text-sm text-[#122038]/70">
+          <Link href="/login" className="font-semibold text-[#122038] underline-offset-4 hover:underline">
+            Sign In
+          </Link>
+          <span className="text-[#122038]/30">·</span>
+          <Link href="/forgot-password" className="font-semibold text-[#122038] underline-offset-4 hover:underline">
+            Forgot Password
           </Link>
         </div>
-      </div>
-    </main>
+      }
+    >
+      {success ? (
+        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Password reset successful.
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      ) : null}
+
+      <form className="space-y-5" onSubmit={onSubmit}>
+        <AuthField
+          label="Reset token"
+          id="token"
+          name="token"
+          required
+          value={token}
+          onChange={(event) => setToken(event.target.value)}
+          placeholder="Paste token"
+          error={fieldErrors.token}
+        />
+
+        <AuthField
+          label="New password"
+          id="new-password"
+          name="new-password"
+          type="password"
+          required
+          value={newPassword}
+          onChange={(event) => setNewPassword(event.target.value)}
+          placeholder="At least 8 characters"
+          error={fieldErrors.newPassword}
+        />
+
+        <AuthField
+          label="Confirm password"
+          id="confirm-password"
+          name="confirm-password"
+          type="password"
+          required
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          placeholder="Repeat password"
+          error={fieldErrors.confirmPassword}
+        />
+
+        <AuthSubmitButton submitting={submitting} idleLabel="Reset Password" busyLabel="Resetting..." />
+      </form>
+    </AuthShell>
   );
 }
