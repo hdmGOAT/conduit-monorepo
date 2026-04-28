@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -312,6 +313,57 @@ func TestRequestToJoin_ClosedGroupCreatesRequest(t *testing.T) {
 	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/5/join", map[string]any{}, "valid-access")
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestRequestToJoin_AlreadyMemberReturnsOk(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 1, Name: "G", IsOpen: false}, nil
+		},
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleMember}}, nil
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/5/join", map[string]any{}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if out["message"] != "already a member" {
+		t.Fatalf("expected already a member message, got %v", out)
+	}
+}
+
+func TestRequestToJoin_ExistingJoinRequestReturnsOk(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
+			return db.Group{ID: id, OwnerID: 1, Name: "G", IsOpen: false}, nil
+		},
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return nil, nil
+		},
+		listJoinRequestsByGroupFn: func(ctx context.Context, groupID int64) ([]db.JoinRequest, error) {
+			return []db.JoinRequest{{UserID: 42, GroupID: groupID, Status: db.JoinRequestStatusPending}}, nil
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/5/join", map[string]any{}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if out["message"] != "join request already exists" {
+		t.Fatalf("expected existing join request message, got %v", out)
 	}
 }
 
@@ -649,5 +701,39 @@ func TestDeleteGroup_GroupFetchError(t *testing.T) {
 	resp := performAuthJSONRequest(router, http.MethodDelete, "/api/groups/5", nil, "valid-access")
 	if resp.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d", resp.Code)
+	}
+}
+
+func TestJoinWithCode_Success(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByJoinCodeFn: func(ctx context.Context, joinCode string) (db.Group, error) {
+			if joinCode == "validcode" {
+				return db.Group{ID: 5, OwnerID: 1, Name: "G", JoinCode: joinCode}, nil
+			}
+			return db.Group{}, sql.ErrNoRows
+		},
+		addMembershipFn: func(ctx context.Context, arg db.AddMembershipParams) (db.Membership, error) {
+			return db.Membership{UserID: arg.Column1, GroupID: arg.Column2, Role: db.MembershipRoleMember}, nil
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/join-with-code", map[string]any{"code": "validcode"}, "valid-access")
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestJoinWithCode_InvalidCode(t *testing.T) {
+	fake := &fakeDB{
+		getGroupByJoinCodeFn: func(ctx context.Context, joinCode string) (db.Group, error) {
+			return db.Group{}, sql.ErrNoRows
+		},
+	}
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+	resp := performAuthJSONRequest(router, http.MethodPost, "/api/groups/join-with-code", map[string]any{"code": "invalid"}, "valid-access")
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", resp.Code, resp.Body.String())
 	}
 }

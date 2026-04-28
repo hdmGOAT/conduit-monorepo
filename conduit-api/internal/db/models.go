@@ -464,6 +464,7 @@ type Group struct {
 	OwnerID   int64              `json:"owner_id"`
 	Name      string             `json:"name"`
 	IsOpen    bool               `json:"is_open"`
+	JoinCode  string             `json:"join_code"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 

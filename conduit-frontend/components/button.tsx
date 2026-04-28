@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ButtonHTMLAttributes, ReactNode } from "react";
 
 type ButtonVariant = "primary" | "secondary" | "tertiary" | "nav-primary" | "nav-secondary";
 type ButtonSize = "sm" | "md" | "lg";
@@ -11,7 +11,7 @@ type ButtonProps = {
   size?: ButtonSize;
   className?: string;
   onClick?: () => void;
-};
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick">;
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
@@ -39,6 +39,8 @@ export function Button({
   size = "md",
   className = "",
   onClick,
+  type = "button",
+  ...buttonProps
 }: ButtonProps) {
   const baseClass = `${variantStyles[variant]} ${sizeStyles[size]} ${className}`;
 
@@ -51,7 +53,7 @@ export function Button({
   }
 
   return (
-    <button className={baseClass} onClick={onClick}>
+    <button className={baseClass} onClick={onClick} type={type} {...buttonProps}>
       {children}
     </button>
   );
