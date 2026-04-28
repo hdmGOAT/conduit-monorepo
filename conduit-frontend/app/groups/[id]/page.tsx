@@ -5,12 +5,37 @@ import React, { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 
+interface Group {
+  id: string
+  name: string
+  role?: string
+  owner_id: string
+  join_code?: string
+  has_pending_request?: boolean
+}
+
+interface Membership {
+  user_id: string
+  group_id: string
+  role: string
+  display_name?: string
+  email?: string
+}
+
+interface JoinRequest {
+  user_id: string
+  group_id: string
+  status: string
+  display_name?: string
+  email?: string
+}
+
 export default function Page() {
   const params = useParams() as { id: string }
   const id = params.id
-  const [group, setGroup] = useState<any>(null)
-  const [memberships, setMemberships] = useState<any[]>([])
-  const [joinRequests, setJoinRequests] = useState<any[]>([])
+  const [group, setGroup] = useState<Group | null>(null)
+  const [memberships, setMemberships] = useState<Membership[]>([])
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -29,7 +54,7 @@ export default function Page() {
         }
         if (res.data.role === 'admin') {
           appAPIClient.get(`/groups/${id}/join-requests`).then(jrRes => {
-            if (mounted) setJoinRequests(jrRes.data.filter((jr: any) => jr.status === 'pending'))
+            if (mounted) setJoinRequests(jrRes.data.filter((jr: JoinRequest) => jr.status === 'pending'))
           }).catch(console.error)
         }
       }
@@ -42,6 +67,7 @@ export default function Page() {
   }, [id])
 
   async function requestJoin() {
+    if (!group) return
     setSubmitting(true)
     setError(null)
     setMessage(null)
@@ -56,11 +82,12 @@ export default function Page() {
         setGroup({ ...group, has_pending_request: true })
       } else {
         setMessage('You joined the group.')
-        setGroup({ ...group, role: body.role })
+        setGroup({ ...group, role: body.role as string })
         appAPIClient.get(`/groups/${id}/memberships`).then(mRes => setMemberships(mRes.data))
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Failed to request access')
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setError(apiError?.response?.data?.error || apiError?.message || 'Failed to request access')
     } finally {
       setSubmitting(false)
     }
@@ -75,8 +102,9 @@ export default function Page() {
     try {
       await appAPIClient.delete(`/groups/${id}/memberships/me`)
       window.location.href = '/groups'
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'Failed to leave group')
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setError(apiError?.response?.data?.error || apiError?.message || 'Failed to leave group')
       setSubmitting(false)
     }
   }
@@ -86,8 +114,9 @@ export default function Page() {
     try {
       await appAPIClient.delete(`/groups/${id}/memberships/${userId}`)
       setMemberships(memberships.filter(m => m.user_id !== userId))
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err?.message || 'Failed to remove member')
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      alert(apiError?.response?.data?.error || apiError?.message || 'Failed to remove member')
     }
   }
 
@@ -99,8 +128,9 @@ export default function Page() {
         // Refresh memberships to include the new member
         appAPIClient.get(`/groups/${id}/memberships`).then(mRes => setMemberships(mRes.data))
       }
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err?.message || `Failed to ${action} request`)
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      alert(apiError?.response?.data?.error || apiError?.message || `Failed to ${action} request`)
     }
   }
 

@@ -6,10 +6,17 @@ import Link from 'next/link'
 import appAPIClient from '@/lib/api/httpClient'
 import GroupForm from '@/components/GroupForm'
 
+interface Group {
+  id: string
+  name: string
+  role?: string
+  is_open?: boolean
+}
+
 export default function EditGroupPage() {
   const params = useParams() as { id: string }
   const id = params.id
-  const [group, setGroup] = useState<any>(null)
+  const [group, setGroup] = useState<Group | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 

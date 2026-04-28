@@ -13,17 +13,19 @@ interface Group {
   privacy?: Privacy
 }
 
+interface GroupFormProps {
+  initialData?: Partial<Group>
+  onSuccess?: (group: Group) => void
+  mode?: 'create' | 'edit'
+  groupId?: string
+}
+
 export default function GroupForm({
   initialData,
   onSuccess,
   mode = 'create',
   groupId,
-}: {
-  initialData?: Partial<Group>
-  onSuccess?: (group: any) => void
-  mode?: 'create' | 'edit'
-  groupId?: string
-}) {
+}: GroupFormProps) {
   const [name, setName] = useState('')
   const [privacy, setPrivacy] = useState<Privacy>('public')
   const [submitting, setSubmitting] = useState(false)
@@ -87,8 +89,9 @@ export default function GroupForm({
           window.location.reload()
         }
       }
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || 'An error occurred')
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setError(apiError?.response?.data?.error || apiError?.message || 'An error occurred')
     } finally {
       setSubmitting(false)
     }

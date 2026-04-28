@@ -183,7 +183,7 @@ func (h *GroupsHandler) GetGroup(c *gin.Context) {
 		if err == nil {
 			role = string(resolvedRole)
 		}
-		
+
 		jr, err := h.db.GetJoinRequest(c.Request.Context(), db.GetJoinRequestParams{UserID: callerID, GroupID: groupID})
 		if err == nil && jr.Status == db.JoinRequestStatusPending {
 			hasPendingRequest = true
@@ -535,7 +535,7 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check join requests"})
 		return
 	}
-	
+
 	var hasExistingJR bool
 	var existingJRStatus db.JoinRequestStatus
 	for _, jr := range existingJRs {

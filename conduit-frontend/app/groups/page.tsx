@@ -9,10 +9,17 @@ type Group = {
   name: string
 }
 
+interface JoinRequest {
+  user_id: string
+  group_id: string
+  status: string
+  group_name?: string
+}
+
 export default function GroupsPage() {
   const [ownedGroups, setOwnedGroups] = useState<Group[]>([])
   const [joinedGroups, setJoinedGroups] = useState<Group[]>([])
-  const [joinRequests, setJoinRequests] = useState<any[]>([])
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([])
   const [activeTab, setActiveTab] = useState<'managed' | 'joined' | 'requests'>('managed')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,9 +47,10 @@ export default function GroupsPage() {
           setJoinedGroups(Array.isArray(joinedRes.data) ? joinedRes.data : joinedRes.data.groups ?? [])
           setJoinRequests(Array.isArray(requestsRes.data) ? requestsRes.data : [])
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const apiError = err as { response?: { data?: { error?: string } }, message?: string }
         if (mounted) {
-          setError(err?.message || 'Failed to load groups')
+          setError(apiError?.message || 'Failed to load groups')
         }
       } finally {
         if (mounted) {
@@ -66,8 +74,9 @@ export default function GroupsPage() {
     try {
       const res = await appAPIClient.post('/groups/join-with-code', { code: joinCode.trim() })
       window.location.href = `/groups/${res.data.group_id}`
-    } catch (err: any) {
-      setJoinError(err?.response?.data?.error || err?.message || 'Failed to join group')
+    } catch (err: unknown) {
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setJoinError(apiError?.response?.data?.error || apiError?.message || 'Failed to join group')
       setJoinSubmitting(false)
     }
   }
