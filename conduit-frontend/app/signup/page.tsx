@@ -51,7 +51,7 @@ export default function SignupPage() {
         password,
         display_name: displayName,
       });
-      router.push("/");
+      router.push("/login");
     } catch (error) {
       setError(getAPIErrorMessage(error, "Unable to create account. Try again."));
     } finally {
