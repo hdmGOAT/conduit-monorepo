@@ -1,6 +1,6 @@
 -- name: CreateGroup :one
-INSERT INTO groups (owner_id, name, is_open)
-VALUES ($1, $2, $3)
+INSERT INTO groups (owner_id, name, is_open, join_code)
+VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: AddMembership :one
@@ -34,6 +34,13 @@ FROM groups
 WHERE owner_id = $1
 ORDER BY id DESC;
 
+-- name: ListGroupsByMember :many
+SELECT g.*
+FROM groups g
+JOIN memberships m ON m.group_id = g.id
+WHERE m.user_id = $1
+ORDER BY g.id DESC;
+
 -- name: GetGroupByID :one
 SELECT *
 FROM groups
@@ -52,6 +59,11 @@ SELECT *
 FROM join_requests
 WHERE group_id = $1
 ORDER BY created_at DESC;
+
+-- name: GetJoinRequest :one
+SELECT *
+FROM join_requests
+WHERE user_id = $1 AND group_id = $2;
 
 -- name: UpdateJoinRequestStatus :one
 WITH params(user_id, group_id, status) AS (
@@ -84,3 +96,15 @@ RETURNING *;
 DELETE FROM groups
 WHERE id = $1
 RETURNING *;
+
+-- name: GetGroupByJoinCode :one
+SELECT *
+FROM groups
+WHERE join_code = $1;
+
+-- name: ListJoinRequestsByUser :many
+SELECT jr.*, g.name as group_name
+FROM join_requests jr
+JOIN groups g ON g.id = jr.group_id
+WHERE jr.user_id = $1 AND jr.status = 'pending'
+ORDER BY jr.created_at DESC;

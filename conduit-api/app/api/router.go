@@ -30,6 +30,9 @@ func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectio
 	groups := api.Group("/groups")
 	groups.POST("", middleware.RequireAuth(authService), groupsHandler.CreateGroup)
 	groups.GET("/owned", middleware.RequireAuth(authService), groupsHandler.ListOwnedGroups)
+	groups.GET("/joined", middleware.RequireAuth(authService), groupsHandler.ListJoinedGroups)
+	groups.GET("/requests", middleware.RequireAuth(authService), groupsHandler.ListUserJoinRequests)
+	groups.GET("/:group_id", middleware.RequireAuth(authService), groupsHandler.GetGroup)
 	groups.POST(":group_id/memberships", middleware.RequireAuth(authService), groupsHandler.AddMembership)
 	groups.GET(":group_id/memberships", middleware.RequireAuth(authService), groupsHandler.ListMemberships)
 	groups.PATCH(":group_id/is_open", middleware.RequireAuth(authService), groupsHandler.ToggleIsOpen)
@@ -40,6 +43,7 @@ func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectio
 	groups.POST(":group_id/join", middleware.RequireAuth(authService), groupsHandler.RequestToJoin)
 	groups.GET(":group_id/join-requests", middleware.RequireAuth(authService), groupsHandler.ListJoinRequests)
 	groups.PATCH(":group_id/join-requests/:user_id", middleware.RequireAuth(authService), groupsHandler.HandleJoinRequest)
+	groups.POST("/join-with-code", middleware.RequireAuth(authService), groupsHandler.JoinWithCode)
 
 	// Collections routes (per-group)
 	groups.POST(":group_id/collections", middleware.RequireAuth(authService), collectionsHandler.CreateCollection)

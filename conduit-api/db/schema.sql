@@ -21,6 +21,7 @@ CREATE TABLE groups (
     owner_id BIGINT NOT NULL REFERENCES users(id),
     name TEXT NOT NULL,
     is_open BOOLEAN NOT NULL DEFAULT false,
+    join_code VARCHAR(20) UNIQUE NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"math/rand"
 )
 
 type GroupsHandler struct {
@@ -65,7 +66,8 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	grp, err := h.db.CreateGroup(c.Request.Context(), db.CreateGroupParams{OwnerID: userID, Name: req.Name, IsOpen: req.IsOpen})
+	joinCode := generateRandomCode(6)
+	grp, err := h.db.CreateGroup(c.Request.Context(), db.CreateGroupParams{OwnerID: userID, Name: req.Name, IsOpen: req.IsOpen, JoinCode: joinCode})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create group"})
 		return
@@ -91,7 +93,7 @@ func (h *GroupsHandler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"id": grp.ID, "owner_id": grp.OwnerID, "name": grp.Name, "is_open": grp.IsOpen})
+	c.JSON(http.StatusOK, gin.H{"id": grp.ID, "owner_id": grp.OwnerID, "name": grp.Name, "is_open": grp.IsOpen, "join_code": grp.JoinCode})
 }
 
 func (h *GroupsHandler) ListOwnedGroups(c *gin.Context) {
@@ -118,6 +120,85 @@ func (h *GroupsHandler) ListOwnedGroups(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *GroupsHandler) ListJoinedGroups(c *gin.Context) {
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	groups, err := h.db.ListGroupsByMember(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list groups"})
+		return
+	}
+
+	out := make([]gin.H, 0, len(groups))
+	for _, g := range groups {
+		if g.OwnerID != userID { // Filter out owned groups to only return genuinely joined groups
+			out = append(out, gin.H{"id": g.ID, "owner_id": g.OwnerID, "name": g.Name})
+		}
+	}
+
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *GroupsHandler) GetGroup(c *gin.Context) {
+	groupIDStr := c.Param("group_id")
+	groupID, err := strconv.ParseInt(groupIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	var callerID int64
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if exists {
+		if uid, ok := userIDValue.(int64); ok {
+			callerID = uid
+		}
+	}
+
+	grp, err := h.db.GetGroupByID(c.Request.Context(), groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group"})
+		return
+	}
+
+	var role string
+	var hasPendingRequest bool
+	if callerID > 0 {
+		_, resolvedRole, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
+		if err == nil {
+			role = string(resolvedRole)
+		}
+
+		jr, err := h.db.GetJoinRequest(c.Request.Context(), db.GetJoinRequestParams{UserID: callerID, GroupID: groupID})
+		if err == nil && jr.Status == db.JoinRequestStatusPending {
+			hasPendingRequest = true
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":                  grp.ID,
+		"owner_id":            grp.OwnerID,
+		"name":                grp.Name,
+		"is_open":             grp.IsOpen,
+		"role":                role,
+		"join_code":           grp.JoinCode,
+		"has_pending_request": hasPendingRequest,
+	})
 }
 
 type addMembershipRequest struct {
@@ -237,7 +318,14 @@ func (h *GroupsHandler) ListMemberships(c *gin.Context) {
 
 	out := make([]gin.H, 0, len(memberships))
 	for _, m := range memberships {
-		out = append(out, gin.H{"user_id": m.UserID, "group_id": m.GroupID, "role": m.Role})
+		email := ""
+		displayName := ""
+		u, err := h.db.GetUserByID(c.Request.Context(), m.UserID)
+		if err == nil {
+			email = u.Email
+			displayName = u.DisplayName
+		}
+		out = append(out, gin.H{"user_id": m.UserID, "group_id": m.GroupID, "role": m.Role, "email": email, "display_name": displayName})
 	}
 
 	c.JSON(http.StatusOK, out)
@@ -447,11 +535,20 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check join requests"})
 		return
 	}
+
+	var hasExistingJR bool
+	var existingJRStatus db.JoinRequestStatus
 	for _, jr := range existingJRs {
 		if jr.UserID == userID {
-			c.JSON(http.StatusOK, gin.H{"user_id": jr.UserID, "group_id": jr.GroupID, "status": jr.Status, "message": "join request already exists"})
-			return
+			hasExistingJR = true
+			existingJRStatus = jr.Status
+			break
 		}
+	}
+
+	if hasExistingJR && existingJRStatus == db.JoinRequestStatusPending {
+		c.JSON(http.StatusOK, gin.H{"user_id": userID, "group_id": groupID, "status": existingJRStatus, "message": "join request already exists"})
+		return
 	}
 
 	if grp.IsOpen {
@@ -460,7 +557,20 @@ func (h *GroupsHandler) RequestToJoin(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add membership"})
 			return
 		}
+		if hasExistingJR {
+			h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{Column1: userID, Column2: groupID, Column3: db.JoinRequestStatusApproved})
+		}
 		c.JSON(http.StatusOK, gin.H{"user_id": m.UserID, "group_id": m.GroupID, "role": m.Role})
+		return
+	}
+
+	if hasExistingJR {
+		jr, err := h.db.UpdateJoinRequestStatus(c.Request.Context(), db.UpdateJoinRequestStatusParams{Column1: userID, Column2: groupID, Column3: db.JoinRequestStatusPending})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update join request"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"user_id": jr.UserID, "group_id": jr.GroupID, "status": jr.Status, "message": "join request recreated"})
 		return
 	}
 
@@ -519,7 +629,45 @@ func (h *GroupsHandler) ListJoinRequests(c *gin.Context) {
 	}
 	out := make([]gin.H, 0, len(jrs))
 	for _, jr := range jrs {
-		out = append(out, gin.H{"user_id": jr.UserID, "group_id": jr.GroupID, "status": jr.Status})
+		email := ""
+		displayName := ""
+		u, err := h.db.GetUserByID(c.Request.Context(), jr.UserID)
+		if err == nil {
+			email = u.Email
+			displayName = u.DisplayName
+		}
+		out = append(out, gin.H{"user_id": jr.UserID, "group_id": jr.GroupID, "status": jr.Status, "email": email, "display_name": displayName})
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+// ListUserJoinRequests returns pending join requests for the current user.
+func (h *GroupsHandler) ListUserJoinRequests(c *gin.Context) {
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	userID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	jrs, err := h.db.ListJoinRequestsByUser(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list join requests"})
+		return
+	}
+
+	out := make([]gin.H, 0, len(jrs))
+	for _, jr := range jrs {
+		out = append(out, gin.H{
+			"user_id":    jr.UserID,
+			"group_id":   jr.GroupID,
+			"status":     jr.Status,
+			"group_name": jr.GroupName,
+		})
 	}
 	c.JSON(http.StatusOK, out)
 }
@@ -772,4 +920,67 @@ func (h *GroupsHandler) EjectMember(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"user_id": m.UserID, "group_id": m.GroupID, "role": m.Role})
+}
+
+func generateRandomCode(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+type joinWithCodeReq struct {
+	Code string `json:"code" binding:"required"`
+}
+
+func (h *GroupsHandler) JoinWithCode(c *gin.Context) {
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	callerID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	var req joinWithCodeReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	joinCode := req.Code
+	grp, err := h.db.GetGroupByJoinCode(c.Request.Context(), joinCode)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "invalid join code"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify join code"})
+		return
+	}
+
+	if grp.IsOpen {
+		// Add membership
+		m, err := h.db.AddMembership(c.Request.Context(), db.AddMembershipParams{Column1: callerID, Column2: grp.ID, Column3: db.MembershipRoleMember})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to join group"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"group_id": grp.ID, "role": m.Role})
+	} else {
+		// Create a join request instead
+		_, err := h.db.CreateJoinRequest(c.Request.Context(), db.CreateJoinRequestParams{Column1: callerID, Column2: grp.ID, Column3: db.JoinRequestStatusPending})
+		if err != nil {
+			// If already requested, it will error on unique constraint, which is fine
+			// We can return a generic message or handle it specifically
+			c.JSON(http.StatusOK, gin.H{"message": "join request created", "group_id": grp.ID})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"message": "join request created", "group_id": grp.ID})
+	}
 }

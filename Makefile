@@ -23,7 +23,7 @@ dev-frontend:
 	cd conduit-frontend && npm run dev
 
 lint: lint-api lint-frontend
-	.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-api-race test-api-integration test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate docs-api
+
 lint-api:
 	cd conduit-api && test -z "$$(gofmt -l .)" && go vet ./...
 

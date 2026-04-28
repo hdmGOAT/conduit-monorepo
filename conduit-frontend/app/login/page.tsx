@@ -41,7 +41,7 @@ export default function LoginPage() {
     try {
       await appAPIClient.post("/auth/login", { email, password });
 
-      router.push("/");
+      router.push("/groups");
     } catch (error) {
       setError(getAPIErrorMessage(error, "Unable to reach the server. Try again."));
     } finally {

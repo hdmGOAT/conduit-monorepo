@@ -18,9 +18,11 @@ type fakeDB struct {
 	withinTxFn                           func(ctx context.Context, fn func(db.Querier) error) error
 	listGroupMembershipsFn               func(ctx context.Context, groupID int64) ([]db.Membership, error)
 	listGroupsByOwnerFn                  func(ctx context.Context, ownerID int64) ([]db.Group, error)
+	listGroupsByMemberFn                 func(ctx context.Context, userID int64) ([]db.Group, error)
 	createJoinRequestFn                  func(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error)
 	listJoinRequestsByGroupFn            func(ctx context.Context, groupID int64) ([]db.JoinRequest, error)
 	updateJoinRequestStatusFn            func(ctx context.Context, arg db.UpdateJoinRequestStatusParams) (db.JoinRequest, error)
+	getJoinRequestFn                     func(ctx context.Context, arg db.GetJoinRequestParams) (db.JoinRequest, error)
 	updateGroupIsOpenFn                  func(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error)
 	deleteMembershipFn                   func(ctx context.Context, arg db.DeleteMembershipParams) (db.Membership, error)
 	updateGroupFn                        func(ctx context.Context, arg db.UpdateGroupParams) (db.Group, error)
@@ -57,6 +59,8 @@ type fakeDB struct {
 	getFormAnswerByIDFn                  func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
 	updateFormAnswerFn                   func(ctx context.Context, arg db.UpdateFormAnswerParams) (db.CollectionFormAnswer, error)
 	deleteFormAnswerFn                   func(ctx context.Context, id int64) (db.CollectionFormAnswer, error)
+	getGroupByJoinCodeFn                 func(ctx context.Context, joinCode string) (db.Group, error)
+	listJoinRequestsByUserFn             func(ctx context.Context, userID int64) ([]db.ListJoinRequestsByUserRow, error)
 }
 
 var _ db.Querier = (*fakeDB)(nil)
@@ -208,6 +212,12 @@ func (f *fakeDB) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]db.Gro
 	}
 	return nil, nil
 }
+func (f *fakeDB) ListGroupsByMember(ctx context.Context, userID int64) ([]db.Group, error) {
+	if f.listGroupsByMemberFn != nil {
+		return f.listGroupsByMemberFn(ctx, userID)
+	}
+	return nil, nil
+}
 func (f *fakeDB) CreateJoinRequest(ctx context.Context, arg db.CreateJoinRequestParams) (db.JoinRequest, error) {
 	if f.createJoinRequestFn != nil {
 		return f.createJoinRequestFn(ctx, arg)
@@ -225,6 +235,12 @@ func (f *fakeDB) UpdateJoinRequestStatus(ctx context.Context, arg db.UpdateJoinR
 		return f.updateJoinRequestStatusFn(ctx, arg)
 	}
 	return db.JoinRequest{}, nil
+}
+func (f *fakeDB) GetJoinRequest(ctx context.Context, arg db.GetJoinRequestParams) (db.JoinRequest, error) {
+	if f.getJoinRequestFn != nil {
+		return f.getJoinRequestFn(ctx, arg)
+	}
+	return db.JoinRequest{}, sql.ErrNoRows
 }
 func (f *fakeDB) UpdateGroupIsOpen(ctx context.Context, arg db.UpdateGroupIsOpenParams) (db.Group, error) {
 	if f.updateGroupIsOpenFn != nil {
@@ -425,4 +441,18 @@ func (f *fakeDB) UpsertOrganizationSubscription(ctx context.Context, arg db.Upse
 		return f.upsertOrganizationSubscriptionFn(ctx, arg)
 	}
 	return db.OrganizationSubscription{}, nil
+}
+
+func (f *fakeDB) GetGroupByJoinCode(ctx context.Context, joinCode string) (db.Group, error) {
+	if f.getGroupByJoinCodeFn != nil {
+		return f.getGroupByJoinCodeFn(ctx, joinCode)
+	}
+	return db.Group{}, nil
+}
+
+func (f *fakeDB) ListJoinRequestsByUser(ctx context.Context, userID int64) ([]db.ListJoinRequestsByUserRow, error) {
+	if f.listJoinRequestsByUserFn != nil {
+		return f.listJoinRequestsByUserFn(ctx, userID)
+	}
+	return nil, nil
 }

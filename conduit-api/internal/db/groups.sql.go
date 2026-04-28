@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const addMembership = `-- name: AddMembership :one
@@ -38,25 +40,32 @@ func (q *Queries) AddMembership(ctx context.Context, arg AddMembershipParams) (M
 }
 
 const createGroup = `-- name: CreateGroup :one
-INSERT INTO groups (owner_id, name, is_open)
-VALUES ($1, $2, $3)
-RETURNING id, owner_id, name, is_open, created_at
+INSERT INTO groups (owner_id, name, is_open, join_code)
+VALUES ($1, $2, $3, $4)
+RETURNING id, owner_id, name, is_open, join_code, created_at
 `
 
 type CreateGroupParams struct {
-	OwnerID int64  `json:"owner_id"`
-	Name    string `json:"name"`
-	IsOpen  bool   `json:"is_open"`
+	OwnerID  int64  `json:"owner_id"`
+	Name     string `json:"name"`
+	IsOpen   bool   `json:"is_open"`
+	JoinCode string `json:"join_code"`
 }
 
 func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error) {
-	row := q.db.QueryRow(ctx, createGroup, arg.OwnerID, arg.Name, arg.IsOpen)
+	row := q.db.QueryRow(ctx, createGroup,
+		arg.OwnerID,
+		arg.Name,
+		arg.IsOpen,
+		arg.JoinCode,
+	)
 	var i Group
 	err := row.Scan(
 		&i.ID,
 		&i.OwnerID,
 		&i.Name,
 		&i.IsOpen,
+		&i.JoinCode,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -92,7 +101,7 @@ func (q *Queries) CreateJoinRequest(ctx context.Context, arg CreateJoinRequestPa
 const deleteGroup = `-- name: DeleteGroup :one
 DELETE FROM groups
 WHERE id = $1
-RETURNING id, owner_id, name, is_open, created_at
+RETURNING id, owner_id, name, is_open, join_code, created_at
 `
 
 func (q *Queries) DeleteGroup(ctx context.Context, id int64) (Group, error) {
@@ -103,6 +112,7 @@ func (q *Queries) DeleteGroup(ctx context.Context, id int64) (Group, error) {
 		&i.OwnerID,
 		&i.Name,
 		&i.IsOpen,
+		&i.JoinCode,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -132,7 +142,7 @@ func (q *Queries) DeleteMembership(ctx context.Context, arg DeleteMembershipPara
 }
 
 const getGroupByID = `-- name: GetGroupByID :one
-SELECT id, owner_id, name, is_open, created_at
+SELECT id, owner_id, name, is_open, join_code, created_at
 FROM groups
 WHERE id = $1
 `
@@ -145,6 +155,50 @@ func (q *Queries) GetGroupByID(ctx context.Context, id int64) (Group, error) {
 		&i.OwnerID,
 		&i.Name,
 		&i.IsOpen,
+		&i.JoinCode,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getGroupByJoinCode = `-- name: GetGroupByJoinCode :one
+SELECT id, owner_id, name, is_open, join_code, created_at
+FROM groups
+WHERE join_code = $1
+`
+
+func (q *Queries) GetGroupByJoinCode(ctx context.Context, joinCode string) (Group, error) {
+	row := q.db.QueryRow(ctx, getGroupByJoinCode, joinCode)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.IsOpen,
+		&i.JoinCode,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getJoinRequest = `-- name: GetJoinRequest :one
+SELECT user_id, group_id, status, created_at
+FROM join_requests
+WHERE user_id = $1 AND group_id = $2
+`
+
+type GetJoinRequestParams struct {
+	UserID  int64 `json:"user_id"`
+	GroupID int64 `json:"group_id"`
+}
+
+func (q *Queries) GetJoinRequest(ctx context.Context, arg GetJoinRequestParams) (JoinRequest, error) {
+	row := q.db.QueryRow(ctx, getJoinRequest, arg.UserID, arg.GroupID)
+	var i JoinRequest
+	err := row.Scan(
+		&i.UserID,
+		&i.GroupID,
+		&i.Status,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -182,8 +236,43 @@ func (q *Queries) ListGroupMemberships(ctx context.Context, groupID int64) ([]Me
 	return items, nil
 }
 
+const listGroupsByMember = `-- name: ListGroupsByMember :many
+SELECT g.id, g.owner_id, g.name, g.is_open, g.join_code, g.created_at
+FROM groups g
+JOIN memberships m ON m.group_id = g.id
+WHERE m.user_id = $1
+ORDER BY g.id DESC
+`
+
+func (q *Queries) ListGroupsByMember(ctx context.Context, userID int64) ([]Group, error) {
+	rows, err := q.db.Query(ctx, listGroupsByMember, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Group
+	for rows.Next() {
+		var i Group
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerID,
+			&i.Name,
+			&i.IsOpen,
+			&i.JoinCode,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listGroupsByOwner = `-- name: ListGroupsByOwner :many
-SELECT id, owner_id, name, is_open, created_at
+SELECT id, owner_id, name, is_open, join_code, created_at
 FROM groups
 WHERE owner_id = $1
 ORDER BY id DESC
@@ -203,6 +292,7 @@ func (q *Queries) ListGroupsByOwner(ctx context.Context, ownerID int64) ([]Group
 			&i.OwnerID,
 			&i.Name,
 			&i.IsOpen,
+			&i.JoinCode,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -247,11 +337,53 @@ func (q *Queries) ListJoinRequestsByGroup(ctx context.Context, groupID int64) ([
 	return items, nil
 }
 
+const listJoinRequestsByUser = `-- name: ListJoinRequestsByUser :many
+SELECT jr.user_id, jr.group_id, jr.status, jr.created_at, g.name as group_name
+FROM join_requests jr
+JOIN groups g ON g.id = jr.group_id
+WHERE jr.user_id = $1 AND jr.status = 'pending'
+ORDER BY jr.created_at DESC
+`
+
+type ListJoinRequestsByUserRow struct {
+	UserID    int64              `json:"user_id"`
+	GroupID   int64              `json:"group_id"`
+	Status    JoinRequestStatus  `json:"status"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	GroupName string             `json:"group_name"`
+}
+
+func (q *Queries) ListJoinRequestsByUser(ctx context.Context, userID int64) ([]ListJoinRequestsByUserRow, error) {
+	rows, err := q.db.Query(ctx, listJoinRequestsByUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListJoinRequestsByUserRow
+	for rows.Next() {
+		var i ListJoinRequestsByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.GroupID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.GroupName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateGroup = `-- name: UpdateGroup :one
 UPDATE groups
 SET name = $2
 WHERE id = $1
-RETURNING id, owner_id, name, is_open, created_at
+RETURNING id, owner_id, name, is_open, join_code, created_at
 `
 
 type UpdateGroupParams struct {
@@ -267,6 +399,7 @@ func (q *Queries) UpdateGroup(ctx context.Context, arg UpdateGroupParams) (Group
 		&i.OwnerID,
 		&i.Name,
 		&i.IsOpen,
+		&i.JoinCode,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -276,7 +409,7 @@ const updateGroupIsOpen = `-- name: UpdateGroupIsOpen :one
 UPDATE groups
 SET is_open = $2
 WHERE id = $1
-RETURNING id, owner_id, name, is_open, created_at
+RETURNING id, owner_id, name, is_open, join_code, created_at
 `
 
 type UpdateGroupIsOpenParams struct {
@@ -292,6 +425,7 @@ func (q *Queries) UpdateGroupIsOpen(ctx context.Context, arg UpdateGroupIsOpenPa
 		&i.OwnerID,
 		&i.Name,
 		&i.IsOpen,
+		&i.JoinCode,
 		&i.CreatedAt,
 	)
 	return i, err
