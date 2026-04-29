@@ -25,6 +25,36 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 12% 18%,
+      rgba(255, 177, 42, 0.08),
+      transparent 24%
+    ),
+    radial-gradient(
+      circle at 88% 78%,
+      rgba(239, 109, 76, 0.08),
+      transparent 26%
+    ),
+    radial-gradient(rgba(18, 32, 56, 0.035) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    3px 3px;
+  opacity: 0.28;
+  z-index: 0;
+}
+
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
 .hero-ring {
   width: 620px;
   height: 620px;
@@ -67,6 +97,22 @@ body {
 .glass-card {
   background: rgba(248, 247, 242, 0.68);
   backdrop-filter: blur(8px);
+}
+
+.noise {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(
+    rgba(18, 32, 56, 0.08) 0.7px,
+    transparent 0.7px
+  );
+  background-size: 3px 3px;
+  opacity: 0.18;
+}
+
+.shadow-glow {
+  box-shadow: 0 24px 64px rgba(18, 32, 56, 0.12);
 }
 
 @keyframes rise {
