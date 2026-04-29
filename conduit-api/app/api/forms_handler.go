@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -37,6 +38,24 @@ func timeToInterface(t pgtype.Timestamptz) interface{} {
 		return t.Time.UTC().Format(time.RFC3339)
 	}
 	return nil
+}
+
+type formFieldState struct {
+	ID          *int64      `json:"id,omitempty"`
+	FieldKey    string      `json:"field_key" binding:"required"`
+	Label       string      `json:"label" binding:"required"`
+	FieldType   string      `json:"field_type" binding:"required,oneof=text textarea number date select checkbox email phone"`
+	Placeholder string      `json:"placeholder"`
+	IsRequired  bool        `json:"is_required"`
+	Options     interface{} `json:"options"`
+	SortOrder   int32       `json:"sort_order" binding:"required,gt=0"`
+}
+
+type reconcileFormRequest struct {
+	Title       string           `json:"title" binding:"required"`
+	Description string           `json:"description"`
+	IsRequired  bool             `json:"is_required"`
+	Fields      []formFieldState `json:"fields"`
 }
 
 func isNoRowsErr(err error) bool {
@@ -148,6 +167,199 @@ func (h *FormsHandler) CreateCollectionForm(c *gin.Context) {
 		out["updated_at"] = form.UpdatedAt.Time.UTC().Format(time.RFC3339)
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+func (h *FormsHandler) buildFieldResponse(field db.CollectionFormField) gin.H {
+	return gin.H{
+		"id":          field.ID,
+		"form_id":     field.FormID,
+		"field_key":   field.FieldKey,
+		"label":       field.Label,
+		"field_type":  field.FieldType,
+		"placeholder": textToInterface(field.Placeholder),
+		"is_required": field.IsRequired,
+		"options":     field.Options,
+		"sort_order":  field.SortOrder,
+	}
+}
+
+func (h *FormsHandler) buildFormResponse(form db.CollectionForm, fields []db.CollectionFormField) gin.H {
+	fieldOut := make([]gin.H, 0, len(fields))
+	for _, field := range fields {
+		fieldOut = append(fieldOut, h.buildFieldResponse(field))
+	}
+
+	out := gin.H{
+		"id":            form.ID,
+		"collection_id": form.CollectionID,
+		"title":         form.Title,
+		"description":   textToInterface(form.Description),
+		"is_required":   form.IsRequired,
+		"fields":        fieldOut,
+	}
+	if form.CreatedAt.Valid {
+		out["created_at"] = form.CreatedAt.Time.UTC().Format(time.RFC3339)
+	}
+	if form.UpdatedAt.Valid {
+		out["updated_at"] = form.UpdatedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+func fieldOptionsBytes(options interface{}) []byte {
+	if options == nil {
+		return nil
+	}
+	bytes, err := json.Marshal(options)
+	if err != nil {
+		return nil
+	}
+	return bytes
+}
+
+func fieldPlaceholder(text string) pgtype.Text {
+	return pgtype.Text{String: text, Valid: text != ""}
+}
+
+func (h *FormsHandler) reconcileCollectionFormFields(ctx context.Context, formID int64, requested []formFieldState) ([]db.CollectionFormField, error) {
+	existingFields, err := h.db.ListCollectionFormFields(ctx, formID)
+	if err != nil {
+		return nil, err
+	}
+
+	existingByID := make(map[int64]db.CollectionFormField, len(existingFields))
+	for _, field := range existingFields {
+		existingByID[field.ID] = field
+	}
+
+	seen := make(map[int64]struct{}, len(requested))
+	retained := make([]db.CollectionFormField, 0, len(requested))
+
+	// First remove fields that are no longer present.
+	requestedIDs := make(map[int64]struct{}, len(requested))
+	for _, field := range requested {
+		if field.ID != nil {
+			requestedIDs[*field.ID] = struct{}{}
+		}
+	}
+	for _, field := range existingFields {
+		if _, ok := requestedIDs[field.ID]; ok {
+			continue
+		}
+		if _, err := h.db.DeleteCollectionFormField(ctx, field.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	// Apply updates and inserts in request order.
+	for _, field := range requested {
+		options := fieldOptionsBytes(field.Options)
+		placeholder := fieldPlaceholder(field.Placeholder)
+		if field.ID != nil {
+			existing, ok := existingByID[*field.ID]
+			if !ok {
+				return nil, fmt.Errorf("field %d not found", *field.ID)
+			}
+			updated, err := h.db.UpdateCollectionFormField(ctx, db.UpdateCollectionFormFieldParams{
+				ID:          existing.ID,
+				FieldKey:    field.FieldKey,
+				Label:       field.Label,
+				Column4:     db.FormFieldType(field.FieldType),
+				Placeholder: placeholder,
+				IsRequired:  field.IsRequired,
+				Options:     options,
+				SortOrder:   field.SortOrder,
+			})
+			if err != nil {
+				return nil, err
+			}
+			retained = append(retained, updated)
+			seen[updated.ID] = struct{}{}
+			continue
+		}
+
+		created, err := h.db.CreateCollectionFormField(ctx, db.CreateCollectionFormFieldParams{
+			FormID:      formID,
+			FieldKey:    field.FieldKey,
+			Label:       field.Label,
+			Column4:     db.FormFieldType(field.FieldType),
+			Placeholder: placeholder,
+			IsRequired:  field.IsRequired,
+			Options:     options,
+			SortOrder:   field.SortOrder,
+		})
+		if err != nil {
+			return nil, err
+		}
+		retained = append(retained, created)
+		seen[created.ID] = struct{}{}
+	}
+
+	return retained, nil
+}
+
+// UpsertCollectionForm updates the form metadata and reconciles all fields in one request.
+func (h *FormsHandler) UpsertCollectionForm(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	formIDStr := c.Param("form_id")
+	formID, err := strconv.ParseInt(formIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form id"})
+		return
+	}
+
+	currentForm, err := h.db.GetCollectionFormByID(c.Request.Context(), formID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form"})
+		return
+	}
+
+	canManage, err := h.canManageCollection(c.Request.Context(), callerID, currentForm.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canManage {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to manage collection form"})
+		return
+	}
+
+	var req reconcileFormRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	desc := pgtype.Text{String: req.Description, Valid: req.Description != ""}
+	form, err := h.db.UpdateCollectionForm(c.Request.Context(), db.UpdateCollectionFormParams{ID: formID, Title: req.Title, Description: desc, IsRequired: req.IsRequired})
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update form"})
+		return
+	}
+
+	reconciledFields, err := h.reconcileCollectionFormFields(c.Request.Context(), formID, req.Fields)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("failed to reconcile form fields: %v", err)})
+		return
+	}
+
+	c.JSON(http.StatusOK, h.buildFormResponse(form, reconciledFields))
 }
 
 // GetCollectionForm returns a form and its fields by collection id
@@ -446,6 +658,142 @@ func (h *FormsHandler) CreateCollectionFormField(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
+// UpdateCollectionFormField updates a single form field
+func (h *FormsHandler) UpdateCollectionFormField(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	fieldIDStr := c.Param("field_id")
+	fieldID, err := strconv.ParseInt(fieldIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid field id"})
+		return
+	}
+
+	// load the field to find its form and collection
+	// we can use ListCollectionFormFields after getting form from db
+	var req struct {
+		FieldKey    string      `json:"field_key" binding:"required"`
+		Label       string      `json:"label" binding:"required"`
+		FieldType   string      `json:"field_type" binding:"required,oneof=text textarea number date select checkbox email phone"`
+		Placeholder string      `json:"placeholder"`
+		IsRequired  bool        `json:"is_required"`
+		Options     interface{} `json:"options"`
+		SortOrder   int32       `json:"sort_order" binding:"required,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	// Verify ownership / management rights by resolving form -> collection
+	// First, get form id by querying list of forms and fields. We'll fetch the form via form id from params if provided.
+	formIDStr := c.Param("form_id")
+	formID, err := strconv.ParseInt(formIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form id"})
+		return
+	}
+
+	form, err := h.db.GetCollectionFormByID(c.Request.Context(), formID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form"})
+		return
+	}
+
+	canManage, err := h.canManageCollection(c.Request.Context(), callerID, form.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canManage {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to manage collection form"})
+		return
+	}
+
+	var opts []byte
+	if req.Options != nil {
+		b, jerr := json.Marshal(req.Options)
+		if jerr == nil {
+			opts = b
+		}
+	}
+	placeholder := pgtype.Text{String: req.Placeholder, Valid: req.Placeholder != ""}
+
+	updated, err := h.db.UpdateCollectionFormField(c.Request.Context(), db.UpdateCollectionFormFieldParams{ID: fieldID, FieldKey: req.FieldKey, Label: req.Label, Column4: db.FormFieldType(req.FieldType), Placeholder: placeholder, IsRequired: req.IsRequired, Options: opts, SortOrder: req.SortOrder})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update field"})
+		return
+	}
+
+	out := gin.H{"id": updated.ID, "form_id": updated.FormID, "field_key": updated.FieldKey, "label": updated.Label, "field_type": updated.FieldType, "placeholder": textToInterface(updated.Placeholder), "is_required": updated.IsRequired, "options": updated.Options, "sort_order": updated.SortOrder}
+	c.JSON(http.StatusOK, out)
+}
+
+// DeleteCollectionFormField removes a single form field
+func (h *FormsHandler) DeleteCollectionFormField(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	fieldIDStr := c.Param("field_id")
+	fieldID, err := strconv.ParseInt(fieldIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid field id"})
+		return
+	}
+
+	formIDStr := c.Param("form_id")
+	formID, err := strconv.ParseInt(formIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid form id"})
+		return
+	}
+
+	form, err := h.db.GetCollectionFormByID(c.Request.Context(), formID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form"})
+		return
+	}
+
+	canManage, err := h.canManageCollection(c.Request.Context(), callerID, form.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify collection access"})
+		return
+	}
+	if !canManage {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to manage collection form"})
+		return
+	}
+
+	deleted, err := h.db.DeleteCollectionFormField(c.Request.Context(), fieldID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete field"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"id": deleted.ID})
+}
+
 // ListCollectionFormFields lists fields for a form
 func (h *FormsHandler) ListCollectionFormFields(c *gin.Context) {
 	callerID, ok := userIDFromContext(c)
@@ -553,6 +901,12 @@ func (h *FormsHandler) CreateFormSubmission(c *gin.Context) {
 
 	sub, err := h.db.CreateFormSubmission(c.Request.Context(), db.CreateFormSubmissionParams{FormID: formID, CollectionID: req.CollectionID, UserID: userID})
 	if err != nil {
+		// Check for unique constraint violation (user already submitted this form)
+		if err.Error() == "ERROR: duplicate key value violates unique constraint \"collection_form_submissions_form_id_user_id_key\" (SQLSTATE 23505)" ||
+			err.Error() == "ERROR: duplicate key value violates unique constraint \"idx_form_submission_unique\" (SQLSTATE 23505)" {
+			c.JSON(http.StatusConflict, gin.H{"error": "user already submitted this form"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create submission"})
 		return
 	}
@@ -612,6 +966,38 @@ func (h *FormsHandler) ListFormSubmissionsByCollection(c *gin.Context) {
 		out = append(out, gin.H{"id": s.ID, "form_id": s.FormID, "collection_id": s.CollectionID, "user_id": s.UserID, "submitted_at": timeToInterface(s.SubmittedAt)})
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// GetMySubmission returns the calling user's submission (if any) for a collection
+func (h *FormsHandler) GetMySubmission(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	collectionIDStr := c.Param("collection_id")
+	collectionID, err := strconv.ParseInt(collectionIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid collection id"})
+		return
+	}
+
+	// reuse existing DB helper to list submissions then filter for caller
+	subs, err := h.db.ListFormSubmissionsByCollection(c.Request.Context(), collectionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load submission"})
+		return
+	}
+
+	for _, s := range subs {
+		if s.UserID == callerID {
+			out := gin.H{"id": s.ID, "form_id": s.FormID, "collection_id": s.CollectionID, "user_id": s.UserID, "submitted_at": timeToInterface(s.SubmittedAt)}
+			c.JSON(http.StatusOK, out)
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
 }
 
 // GetFormSubmissionByID returns a submission by id
@@ -685,10 +1071,6 @@ func (h *FormsHandler) UpdateFormSubmission(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -776,10 +1158,6 @@ func (h *FormsHandler) DeleteFormSubmission(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -826,10 +1204,6 @@ func (h *FormsHandler) AddFormAnswer(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -888,10 +1262,6 @@ func (h *FormsHandler) ListFormAnswersBySubmission(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -947,10 +1317,6 @@ func (h *FormsHandler) GetFormAnswerByID(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -997,10 +1363,6 @@ func (h *FormsHandler) UpdateFormAnswer(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}
@@ -1072,10 +1434,6 @@ func (h *FormsHandler) DeleteFormAnswer(c *gin.Context) {
 
 	canManage, err := h.canManageSubmission(c.Request.Context(), callerID, sub)
 	if err != nil {
-		if isNoRowsErr(err) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "submission not found"})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify submission access"})
 		return
 	}

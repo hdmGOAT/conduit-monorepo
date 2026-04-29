@@ -63,14 +63,18 @@ func NewRouter(authHandler *AuthHandler, groupsHandler *GroupsHandler, collectio
 	api.GET("/collections/:collection_id/form", middleware.RequireAuth(authService), formsHandler.GetCollectionForm)
 
 	api.GET("/forms/:form_id", middleware.RequireAuth(authService), formsHandler.GetCollectionFormByID)
+	api.PUT("/forms/:form_id", middleware.RequireAuth(authService), formsHandler.UpsertCollectionForm)
 	api.PATCH("/forms/:form_id", middleware.RequireAuth(authService), formsHandler.UpdateCollectionForm)
 	api.DELETE("/forms/:form_id", middleware.RequireAuth(authService), formsHandler.DeleteCollectionForm)
 
 	api.POST("/forms/:form_id/fields", middleware.RequireAuth(authService), formsHandler.CreateCollectionFormField)
 	api.GET("/forms/:form_id/fields", middleware.RequireAuth(authService), formsHandler.ListCollectionFormFields)
+	api.PATCH("/forms/:form_id/fields/:field_id", middleware.RequireAuth(authService), formsHandler.UpdateCollectionFormField)
+	api.DELETE("/forms/:form_id/fields/:field_id", middleware.RequireAuth(authService), formsHandler.DeleteCollectionFormField)
 
 	api.POST("/forms/:form_id/submissions", middleware.RequireAuth(authService), formsHandler.CreateFormSubmission)
 	api.GET("/collections/:collection_id/submissions", middleware.RequireAuth(authService), formsHandler.ListFormSubmissionsByCollection)
+	api.GET("/collections/:collection_id/submissions/me", middleware.RequireAuth(authService), formsHandler.GetMySubmission)
 	api.GET("/forms/:form_id/submissions/:submission_id", middleware.RequireAuth(authService), formsHandler.GetFormSubmissionByID)
 	api.PATCH("/forms/:form_id/submissions/:submission_id", middleware.RequireAuth(authService), formsHandler.UpdateFormSubmission)
 	api.DELETE("/forms/:form_id/submissions/:submission_id", middleware.RequireAuth(authService), formsHandler.DeleteFormSubmission)
