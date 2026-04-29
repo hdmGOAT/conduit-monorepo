@@ -37,6 +37,7 @@ interface Collection {
   status: string
   deadline: string
   paid_by_current_user?: boolean
+  has_submission_by_current_user?: boolean
 }
 
 function formatCurrency(amountInCents: number) {
@@ -75,7 +76,21 @@ export default function Page() {
         setGroup(res.data)
         appAPIClient.get(`/groups/${id}/collections`).then((cRes) => {
           if (!mounted) return
-          setCollections(Array.isArray(cRes.data) ? cRes.data : [])
+          const groupCollections = Array.isArray(cRes.data) ? cRes.data : []
+          Promise.all(
+            groupCollections.map(async (collection: Collection) => {
+              const submissionRes = await appAPIClient
+                .get(`/collections/${collection.id}/submissions/me`)
+                .catch(() => ({ data: null }))
+
+              return {
+                ...collection,
+                has_submission_by_current_user: Boolean(submissionRes.data),
+              }
+            })
+          ).then((enrichedCollections) => {
+            if (mounted) setCollections(enrichedCollections)
+          }).catch(console.error)
         }).catch(console.error)
         if (res.data.role) {
           appAPIClient.get(`/groups/${id}/memberships`).then(mRes => {
@@ -337,9 +352,15 @@ export default function Page() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
-                          c.paid_by_current_user ? "bg-forest/5 text-forest" : "bg-gold/5 text-gold"
+                          c.status === 'closed' || (c.paid_by_current_user && c.has_submission_by_current_user)
+                            ? "bg-forest/5 text-forest"
+                            : "bg-gold/5 text-gold"
                         }`}>
-                          {c.paid_by_current_user ? 'Paid' : c.status}
+                          {c.status === 'closed' || (c.paid_by_current_user && c.has_submission_by_current_user)
+                            ? 'Completed'
+                            : c.paid_by_current_user
+                            ? 'Paid'
+                            : c.status}
                         </span>
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/5 text-ink transition-all group-hover:bg-ink group-hover:text-white">
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>

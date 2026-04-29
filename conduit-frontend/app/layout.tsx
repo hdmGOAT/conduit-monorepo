@@ -1,43 +1,25 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Fraunces, Space_Grotesk } from "next/font/google";
-import "./globals.css";
+import React from 'react'
+import './globals.css'
+import TopBar from '@/components/topbar'
+import { Fraunces, Space_Grotesk } from 'next/font/google'
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+const fraunces = Fraunces({ variable: '--font-display', subsets: ['latin'], weight: ['400','500','600','700'] })
+const space = Space_Grotesk({ variable: '--font-body', subsets: ['latin'], weight: ['400','500','600','700'] })
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+export const metadata = {
+  title: 'Conduit',
+  description: 'Run communities like a product',
+}
 
-const fraunces = Fraunces({
-  variable: "--font-display",
-  subsets: ["latin"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-body",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Conduit",
-  description: "Run communities like a product",
-};
-
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${spaceGrotesk.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col font-body text-ink">{children}</body>
+    <html lang="en" className={`${fraunces.variable} ${space.variable} h-full antialiased`}>
+      <body className="bg-gray-50 text-ink">
+        <TopBar />
+        <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
+          {children}
+        </main>
+      </body>
     </html>
-  );
+  )
 }

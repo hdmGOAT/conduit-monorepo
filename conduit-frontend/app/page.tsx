@@ -24,33 +24,6 @@ export default function Home() {
       <div className="noise" />
 
       <div className="relative z-10">
-        <header className="sticky top-0 z-30 border-b border-ink/10 bg-cloud/95 backdrop-blur-xl">
-          <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
-            <Link
-              href="/"
-              className={`${fraunces.className} text-3xl font-semibold tracking-tight`}
-            >
-              Conduit
-            </Link>
-            <div className="flex items-center gap-3">
-              <Button
-                href="/login"
-                variant="nav-primary"
-                size="sm"
-              >
-                Log In
-              </Button>
-              <Button
-                href="/signup"
-                variant="nav-secondary"
-                size="sm"
-              >
-              Sign Up
-              </Button>
-            </div>
-          </nav>
-        </header>
-
         <div>
           <section className="relative overflow-hidden">
             <div className="hero-ring absolute -right-30 top-20 hidden lg:block" />

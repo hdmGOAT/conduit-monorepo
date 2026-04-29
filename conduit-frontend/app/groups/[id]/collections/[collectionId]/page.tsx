@@ -1,7 +1,7 @@
 "use client"
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 import { StripePaymentForm } from '@/components/collections/stripe-payment-form'
 import { Button } from '@/components/button'
@@ -116,9 +116,39 @@ function sameUserId(left: string | number | undefined, right: string | number | 
   return String(left ?? '') === String(right ?? '')
 }
 
+function parseFieldOptions(options: unknown): string[] {
+  // Handle null/undefined
+  if (!options) return []
+  
+  // If already an array, return it
+  if (Array.isArray(options)) return options.map(o => String(o))
+  
+  // If string, try to decode from base64 then parse as JSON
+  if (typeof options === 'string') {
+    try {
+      // Try base64 decode first
+      const decoded = atob(options)
+      const parsed = JSON.parse(decoded)
+      if (Array.isArray(parsed)) return parsed.map(o => String(o))
+    } catch {
+      // If base64 decode fails, try parsing as JSON directly
+      try {
+        const parsed = JSON.parse(options)
+        if (Array.isArray(parsed)) return parsed.map(o => String(o))
+      } catch {
+        // If all else fails, return empty array
+        return []
+      }
+    }
+  }
+  
+  return []
+}
+
 export default function Page() {
   const params = useParams() as { id: string; collectionId: string }
   const { id, collectionId } = params
+  
   const [group, setGroup] = useState<Group | null>(null)
   const [collection, setCollection] = useState<Collection | null>(null)
   const [form, setForm] = useState<CollectionForm | null>(null)
@@ -137,12 +167,15 @@ export default function Page() {
 
   useEffect(() => {
     // If the current user already has a submission, prefill the form answers
-    if (!me || !form || submissions.length === 0) return
+    if (!me || !form) return
 
+    // Find the current user's submission across all submissions
     const mySubmission = submissions.find((s) => String(s.user_id) === String(me.id))
     if (!mySubmission) return
 
     const myAnswers = submissionAnswers[mySubmission.id] ?? []
+    if (myAnswers.length === 0) return
+
     const map: Record<string, string> = {}
     myAnswers.forEach((a) => {
       if (a.value_text !== undefined && a.value_text !== null) {
@@ -156,9 +189,12 @@ export default function Page() {
       }
     })
 
-    // Only set answers if there is at least one value (prevents overwriting deliberate empty state)
+    // Set answers with the prefilled values
     if (Object.keys(map).length > 0) {
-      setAnswers((current) => ({ ...Object.fromEntries(sortFields(form.fields).map((f) => [String(f.id), current[String(f.id)] ?? ''])), ...map }))
+      setAnswers((current) => ({
+        ...Object.fromEntries(sortFields(form.fields).map((f) => [String(f.id), current[String(f.id)] ?? ''])),
+        ...map
+      }))
     }
   }, [submissionAnswers, submissions, me, form])
 
@@ -336,6 +372,8 @@ export default function Page() {
     await refreshPayments(collection.id)
   }
 
+  const router = useRouter()
+
   async function submitForm(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!collection || !form) return
@@ -399,6 +437,16 @@ export default function Page() {
         )
         setSubmissionAnswers(Object.fromEntries(answersBySubmission))
       }
+
+        // Clear form fields after successful submission
+        setAnswers({})
+
+        // Navigate back to group page to 'close' the form view
+        try {
+          router.push(`/groups/${id}`)
+        } catch {
+          // ignore navigation errors
+        }
     } catch (submissionError: unknown) {
       const apiError = submissionError as { response?: { data?: { error?: string } }, message?: string }
       setError(apiError?.response?.data?.error || apiError?.message || 'Failed to submit form')
@@ -438,9 +486,9 @@ export default function Page() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-5 py-12 sm:px-8">
+    <main className="mx-auto max-w-6xl px-5 py-12 sm:px-8">
       {/* Header */}
-      <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
             <span className="rounded-full bg-mist px-3 py-1 text-xs font-bold uppercase tracking-wider text-forest">
@@ -456,18 +504,23 @@ export default function Page() {
           </p>
         </div>
 
-        {group.role === 'admin' && (
-          <div className="flex items-center gap-3">
-            <Button href={`/groups/${id}/collections/${collectionId}/edit`} variant="nav-secondary" size="sm">
-              Edit Settings
-            </Button>
-            {collection.status !== 'closed' && (
-              <Button onClick={closeCollection} variant="tertiary" size="sm">
-                Close Collection
+        <div className="flex flex-col gap-3 items-end">
+          {group.role === 'admin' && (
+            <div className="flex items-center gap-2">
+              <Button href={`/groups/${id}/collections/${collectionId}/edit`} variant="nav-secondary" size="sm">
+                Edit Settings
               </Button>
-            )}
-          </div>
-        )}
+              {collection.status !== 'closed' && (
+                <Button onClick={closeCollection} variant="tertiary" size="sm">
+                  Close
+                </Button>
+              )}
+            </div>
+          )}
+          <Button href={`/groups/${id}`} variant="nav-secondary" size="sm">
+            ← Group
+          </Button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -491,95 +544,88 @@ export default function Page() {
         )}
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr]">
-        <div className="space-y-8">
-          {/* Payment Section */}
-          {!paidPayment && (
-            <section className="glass-card rounded-3xl border border-ink/10 p-8 shadow-glow">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="font-display text-2xl font-bold text-ink">Payment</h2>
-                  <p className="mt-2 text-sm leading-relaxed text-ink/60">
-                    Record your contribution to unlock the attached collection form.
+      <div className="grid gap-8 lg:grid-cols-3">
+        {/* Left: Payment & Form */}
+        <div className="lg:col-span-2 space-y-8">
+          <div className="grid gap-8 sm:grid-cols-2">
+            {/* Payment Section */}
+            {!paidPayment && (
+              <section className="glass-card rounded-3xl border border-ink/10 p-6 shadow-glow">
+                <div className="mb-4">
+                  <h2 className="font-display text-xl font-bold text-ink">Payment</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-ink/60">
+                    Unlock form
                   </p>
                 </div>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink/5 text-ink/40">
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
+
+                <div className="flex flex-col gap-2 mb-6">
+                  <Button onClick={() => startPayment('stripe')} disabled={paying} variant="primary" size="sm" className="w-full">
+                    {paying ? 'Processing...' : 'Stripe'}
+                  </Button>
+                  <Button onClick={() => startPayment('cash')} disabled={paying} variant="nav-secondary" size="sm" className="w-full">
+                    Cash
+                  </Button>
                 </div>
-              </div>
 
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => startPayment('stripe')} disabled={paying} variant="primary">
-                  {paying ? 'Processing...' : 'Pay with Stripe'}
-                </Button>
-                <Button onClick={() => startPayment('cash')} disabled={paying} variant="nav-secondary">
-                  Record Cash
-                </Button>
-              </div>
-
-              {stripeClientSecret && (
-                <div className="mt-8 rounded-2xl border border-ink/5 bg-ink/[0.02] p-6">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-ink/40">Secure Checkout</h3>
-                  <div className="mt-4">
+                {stripeClientSecret && (
+                  <div className="rounded-2xl border border-ink/5 bg-ink/[0.02] p-4">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-ink/40 mb-3">Checkout</h3>
                     <StripePaymentForm
                       clientSecret={stripeClientSecret}
                       onCompleted={handleStripeCompleted}
                       onCancel={() => setStripeClientSecret(null)}
                     />
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="mt-8 pt-8 border-t border-ink/5">
-                <p className="text-xs font-bold uppercase tracking-widest text-ink/30">Your Status</p>
-                <div className="mt-3">
+                <div className="mt-4 pt-4 border-t border-ink/5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30 mb-2">Status</p>
                   {!myPayment ? (
                     <div className="flex items-center gap-2 text-ink/50">
-                      <div className="h-2 w-2 rounded-full bg-ember animate-pulse"></div>
-                      <span className="text-sm">Pending payment</span>
+                      <div className="h-1.5 w-1.5 rounded-full bg-ember animate-pulse"></div>
+                      <span className="text-xs">Pending</span>
                     </div>
                   ) : (
-                    <div className="flex items-center justify-between rounded-xl bg-ink/5 px-4 py-3">
-                      <span className="text-sm font-medium text-ink/70 capitalize">{myPayment.method}</span>
-                      <span className={`text-xs font-bold uppercase tracking-wide ${myPayment.status === 'paid' ? 'text-forest' : 'text-ember'}`}>
+                    <div className="flex items-center justify-between rounded-lg bg-ink/5 px-3 py-2">
+                      <span className="text-xs font-medium text-ink/70 capitalize">{myPayment.method}</span>
+                      <span className={`text-[10px] font-bold uppercase ${myPayment.status === 'paid' ? 'text-forest' : 'text-ember'}`}>
                         {myPayment.status}
                       </span>
                     </div>
                   )}
                 </div>
+              </section>
+            )}
+
+            {/* Form Section */}
+            <section className="glass-card rounded-3xl border border-ink/10 p-6 shadow-glow">
+              <div className="mb-4">
+                <h2 className="font-display text-xl font-bold text-ink">Details</h2>
+                {form && (
+                  <div className="mt-3 rounded-xl bg-forest/5 border border-forest/10 p-3">
+                    <h3 className="text-sm font-bold text-forest">{form.title}</h3>
+                    {form.description && <p className="mt-1 text-xs leading-relaxed text-forest/70">{form.description}</p>}
+                    {isEditing && (
+                      <div className="mt-2 flex items-center gap-2 rounded-lg bg-amber-100/50 px-2 py-1 text-[10px] font-medium text-amber-800">
+                        <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                        </svg>
+                        Editing
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </section>
-          )}
 
-          {/* Form Section */}
-          <section className="glass-card rounded-3xl border border-ink/10 p-8 shadow-glow">
-            <div className="mb-6">
-              <h2 className="font-display text-2xl font-bold text-ink">Details</h2>
-              {form && (
-                <div className="mt-4 rounded-2xl bg-forest/5 border border-forest/10 p-5">
-                  <h3 className="text-lg font-bold text-forest">{form.title}</h3>
-                  {form.description && <p className="mt-2 text-sm leading-relaxed text-forest/70">{form.description}</p>}
-                  {isEditing && (
-                    <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-100/50 px-3 py-1.5 text-xs font-medium text-amber-800">
-                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                      </svg>
-                      Updating previous submission
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {form ? (
-              <form onSubmit={submitForm} className="space-y-6">
-                {sortFields(form.fields).map((field) => {
-                  const inputValue = answers[field.id] ?? ''
+              {form ? (
+                <form onSubmit={submitForm} className="space-y-4">
+                  {sortFields(form.fields).map((field) => {
+                    const inputValue = answers[field.id] ?? ''
+                    const fieldOptions = parseFieldOptions(field.options)
+                  
                   return (
-                    <div key={field.id} className="space-y-2">
-                      <label className="text-sm font-bold text-ink/70">
+                    <div key={field.id} className="space-y-1">
+                      <label className="text-xs font-bold text-ink/70">
                         {field.label}
                         {field.is_required && <span className="ml-1 text-ember">*</span>}
                       </label>
@@ -589,10 +635,51 @@ export default function Page() {
                           value={inputValue}
                           onChange={(e) => setAnswers(curr => ({ ...curr, [field.id]: e.target.value }))}
                           placeholder={field.placeholder ?? ''}
-                          rows={4}
+                          rows={3}
                           disabled={!paidPayment}
-                          className="w-full rounded-xl border border-ink/10 bg-white/50 px-4 py-3 text-ink outline-none focus:border-ink/20 focus:ring-4 focus:ring-ink/5 disabled:opacity-50 transition-all"
+                          className="w-full rounded-lg border border-ink/10 bg-white/50 px-3 py-2 text-sm text-ink outline-none focus:border-ink/20 focus:ring-2 focus:ring-ink/5 disabled:opacity-50 transition-all"
                         />
+                      ) : field.field_type === 'select' ? (
+                        <select
+                          value={inputValue}
+                          onChange={(e) => setAnswers(curr => ({ ...curr, [field.id]: e.target.value }))}
+                          disabled={!paidPayment}
+                          className="w-full rounded-lg border border-ink/10 bg-white/50 px-3 py-2 text-sm text-ink outline-none focus:border-ink/20 focus:ring-2 focus:ring-ink/5 disabled:opacity-50 transition-all appearance-none"
+                        >
+                          <option value="" disabled>{field.placeholder || 'Select an option'}</option>
+                          {fieldOptions.map((option, idx) => (
+                            <option key={idx} value={String(option)}>
+                              {String(option)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.field_type === 'checkbox' ? (
+                        <div className="space-y-1">
+                          {fieldOptions.map((option, idx) => (
+                            <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={inputValue.includes(String(option))}
+                                onChange={(e) => {
+                                  const optionStr = String(option)
+                                  if (e.target.checked) {
+                                    const currentValues = inputValue ? inputValue.split('|') : []
+                                    if (!currentValues.includes(optionStr)) {
+                                      currentValues.push(optionStr)
+                                      setAnswers(curr => ({ ...curr, [field.id]: currentValues.join('|') }))
+                                    }
+                                  } else {
+                                    const currentValues = inputValue.split('|').filter(v => v !== optionStr)
+                                    setAnswers(curr => ({ ...curr, [field.id]: currentValues.join('|') }))
+                                  }
+                                }}
+                                disabled={!paidPayment}
+                                className="h-3.5 w-3.5 rounded border-ink/20 text-forest focus:ring-ink/10 disabled:opacity-50 transition-all"
+                              />
+                              <span className="text-xs text-ink/70">{String(option)}</span>
+                            </label>
+                          ))}
+                        </div>
                       ) : (
                         <input
                           type={field.field_type}
@@ -600,7 +687,7 @@ export default function Page() {
                           onChange={(e) => setAnswers(curr => ({ ...curr, [field.id]: e.target.value }))}
                           placeholder={field.placeholder ?? ''}
                           disabled={!paidPayment}
-                          className="w-full rounded-xl border border-ink/10 bg-white/50 px-4 py-3 text-ink outline-none focus:border-ink/20 focus:ring-4 focus:ring-ink/5 disabled:opacity-50 transition-all"
+                          className="w-full rounded-lg border border-ink/10 bg-white/50 px-3 py-2 text-sm text-ink outline-none focus:border-ink/20 focus:ring-2 focus:ring-ink/5 disabled:opacity-50 transition-all"
                         />
                       )}
                     </div>
@@ -611,102 +698,98 @@ export default function Page() {
                   type="submit"
                   disabled={!paidPayment || submitting}
                   variant={paidPayment ? 'primary' : 'nav-secondary'}
+                  size="sm"
                   className="w-full"
                 >
-                  {submitting ? 'Submitting...' : isEditing ? 'Update Submission' : paidPayment ? 'Complete Form' : 'Pay to Unlock Form'}
+                  {submitting ? 'Submitting...' : isEditing ? 'Update' : paidPayment ? 'Submit' : 'Pay to Unlock'}
                 </Button>
               </form>
             ) : (
-              <div className="rounded-2xl border border-dashed border-ink/10 p-8 text-center">
-                <p className="text-sm text-ink/40">No form details required for this collection.</p>
+              <div className="rounded-lg border border-dashed border-ink/10 p-4 text-center">
+                <p className="text-xs text-ink/40">No form details required for this collection.</p>
               </div>
             )}
           </section>
         </div>
+      </div>
 
-        <div className="space-y-8">
-          {/* Admin Stats */}
-          {group.role === 'admin' && (
+        {/* Right Sidebar: Admin Stats */}
+        {group.role === 'admin' && (
+          <div>
             <section className="glass-card rounded-3xl border border-ink/10 p-6 shadow-glow">
-              <h2 className="font-display text-xl font-bold text-ink">Quick Status</h2>
-              <div className="mt-6 grid grid-cols-2 gap-4">
-                <div className="rounded-2xl bg-forest/5 p-4 border border-forest/10">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-forest/60">Paid</p>
-                  <p className="mt-1 text-3xl font-bold text-forest">{paidUserIds.size}</p>
+              <h2 className="font-display text-lg font-bold text-ink">Status</h2>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-forest/5 p-3 border border-forest/10">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-forest/60">Paid</p>
+                  <p className="mt-1 text-2xl font-bold text-forest">{paidUserIds.size}</p>
                 </div>
-                <div className="rounded-2xl bg-ember/5 p-4 border border-ember/10">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-ember/60">Unpaid</p>
-                  <p className="mt-1 text-3xl font-bold text-ember">{unpaidMembers.length}</p>
+                <div className="rounded-xl bg-ember/5 p-3 border border-ember/10">
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-ember/60">Unpaid</p>
+                  <p className="mt-1 text-2xl font-bold text-ember">{unpaidMembers.length}</p>
                 </div>
               </div>
 
-              <div className="mt-8 space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-widest text-ink/30">Pending Members</h3>
-                <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+              <div className="mt-6 space-y-3">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Pending</h3>
+                <div className="max-h-[250px] overflow-y-auto space-y-1.5 pr-2">
                   {unpaidMembers.length === 0 ? (
-                    <p className="text-sm italic text-ink/40">Everyone has contributed.</p>
+                    <p className="text-xs italic text-ink/40">All paid up.</p>
                   ) : (
                     unpaidMembers.map(member => (
-                      <div key={member.user_id} className="flex items-center justify-between rounded-xl bg-ink/5 p-3">
-                        <span className="text-xs font-medium text-ink/70 truncate mr-2">
+                      <div key={member.user_id} className="flex items-center justify-between rounded-lg bg-ink/5 p-2">
+                        <span className="text-xs font-medium text-ink/70 truncate mr-1">
                           {member.display_name || member.email}
                         </span>
-                        <span className="text-[10px] font-bold text-ember uppercase tracking-tighter shrink-0">Unpaid</span>
+                        <span className="text-[9px] font-bold text-ember uppercase tracking-tighter shrink-0">Unpaid</span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
             </section>
-          )}
-
-          <div className="flex justify-center">
-            <Button href={`/groups/${id}`} variant="nav-secondary" size="sm">
-              &larr; Back to Group
-            </Button>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Response Table (Admin Only) */}
+      {/* Submissions Table */}
       {group.role === 'admin' && form && (
-        <section className="mt-16 pt-16 border-t border-ink/10">
-          <div className="mb-8 flex items-baseline justify-between">
-            <h2 className="font-display text-3xl font-bold text-ink">Submissions</h2>
-            <span className="text-sm font-medium text-ink/40">{submissions.length} Total</span>
+        <section className="mt-12 pt-12 border-t border-ink/10">
+          <div className="mb-6 flex items-baseline justify-between">
+            <h2 className="font-display text-2xl font-bold text-ink">Submissions</h2>
+            <span className="text-sm font-medium text-ink/40">{submissions.length}</span>
           </div>
 
-          <div className="grid gap-6">
+          <div className="grid gap-4">
             {submissions.length === 0 ? (
-              <div className="glass-card rounded-3xl border border-dashed border-ink/10 p-12 text-center">
-                <p className="text-ink/40">Waiting for the first response...</p>
+              <div className="glass-card rounded-3xl border border-dashed border-ink/10 p-8 text-center">
+                <p className="text-sm text-ink/40">Waiting for responses...</p>
               </div>
             ) : (
               submissions.map(submission => {
                 const answers = submissionAnswers[submission.id] ?? []
                 const payment = paymentByUser.get(String(submission.user_id))
                 return (
-                  <article key={submission.id} className="glass-card overflow-hidden rounded-3xl border border-ink/10 shadow-glow">
-                    <div className="flex items-center justify-between bg-ink/5 px-6 py-4">
+                  <article key={submission.id} className="glass-card overflow-hidden rounded-2xl border border-ink/10 shadow-glow">
+                    <div className="flex items-center justify-between bg-ink/5 px-4 py-3">
                       <div>
-                        <p className="text-sm font-bold text-ink">
-                          {members.find(m => m.user_id === submission.user_id)?.display_name || 'Anonymous User'}
+                        <p className="text-xs font-bold text-ink">
+                          {members.find(m => m.user_id === submission.user_id)?.display_name || 'Anonymous'}
                         </p>
-                        <p className="text-[10px] text-ink/40 uppercase tracking-widest mt-0.5">
+                        <p className="text-[9px] text-ink/40 uppercase tracking-widest mt-0.5">
                           {submission.submitted_at ? formatDate(submission.submitted_at) : 'Recently'}
                         </p>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${payment?.status === 'paid' ? 'bg-forest/10 text-forest' : 'bg-ember/10 text-ember'}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${payment?.status === 'paid' ? 'bg-forest/10 text-forest' : 'bg-ember/10 text-ember'}`}>
                         {payment?.status === 'paid' ? 'Paid' : 'Unconfirmed'}
                       </span>
                     </div>
-                    <div className="p-6 grid gap-4 sm:grid-cols-2">
+                    <div className="p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {sortFields(form.fields).map(field => {
                         const answer = answers.find(a => String(a.field_id) === String(field.id))
                         return (
-                          <div key={field.id} className="space-y-1">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">{field.label}</p>
-                            <p className="text-sm font-medium text-ink/80">
+                          <div key={field.id} className="space-y-0.5">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-ink/30">{field.label}</p>
+                            <p className="text-xs font-medium text-ink/80 break-words">
                               {answer?.value_text || (answer?.value_json ? JSON.stringify(answer.value_json) : '—')}
                             </p>
                           </div>
