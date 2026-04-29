@@ -1,10 +1,10 @@
 "use client"
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 import { StripePaymentForm } from '@/components/collections/stripe-payment-form'
+import { Button } from '@/components/button'
 
 type Group = {
   id: string
@@ -408,349 +408,310 @@ export default function Page() {
   }
 
   if (loading) {
-    return <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">Loading collection…</main>
+    return (
+      <main className="mx-auto flex max-w-6xl items-center justify-center px-5 py-32 sm:px-8">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-ink/20 border-t-ink"></div>
+          <p className="text-sm font-medium text-ink/60">Loading collection details...</p>
+        </div>
+      </main>
+    )
   }
 
   if (!group || !collection) {
     return (
-      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
-          {error || 'Collection not found.'}
+      <main className="mx-auto max-w-3xl px-5 py-24 sm:px-8">
+        <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-8 text-center backdrop-blur-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-rose-900">Collection not found</h2>
+          <p className="mt-2 text-rose-700/70">{error || 'This collection might have been deleted or moved.'}</p>
+          <div className="mt-8">
+            <Button href={`/groups/${id}`} variant="secondary">Back to group</Button>
+          </div>
         </div>
-        <Link href={`/groups/${id}`} className="mt-4 inline-block text-blue-600 underline">
-          Back to group
-        </Link>
       </main>
     )
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <main className="mx-auto max-w-4xl px-5 py-12 sm:px-8">
+      {/* Header */}
+      <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
         <div>
-          <p className="text-sm uppercase tracking-[0.16em] text-ink/60">Collection</p>
-          <h1 className="mt-2 text-4xl font-semibold text-ink">{formatCurrency(collection.amount)}</h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-ink/70">
-            Due {formatDate(collection.deadline)} · Status: {collection.status}
+          <div className="mb-3 flex items-center gap-2">
+            <span className="rounded-full bg-mist px-3 py-1 text-xs font-bold uppercase tracking-wider text-forest">
+              {collection.status}
+            </span>
+            <span className="text-sm text-ink/50">Collection</span>
+          </div>
+          <h1 className="font-display text-4xl font-bold tracking-tight text-ink sm:text-5xl">
+            {formatCurrency(collection.amount)}
+          </h1>
+          <p className="mt-3 text-lg text-ink/60">
+            Due <span className="font-medium text-ink">{formatDate(collection.deadline)}</span>
           </p>
         </div>
 
-        {group.role === 'admin' ? (
-          <div className="flex flex-wrap gap-3">
-            <Link href={`/groups/${id}/collections/${collectionId}/edit`} className="rounded-full border border-ink/15 bg-cloud px-4 py-2 text-sm font-medium text-ink transition hover:bg-[#f3efe7]">
-              Edit collection
-            </Link>
+        {group.role === 'admin' && (
+          <div className="flex items-center gap-3">
+            <Button href={`/groups/${id}/collections/${collectionId}/edit`} variant="nav-secondary" size="sm">
+              Edit Settings
+            </Button>
             {collection.status !== 'closed' && (
-              <button onClick={closeCollection} className="rounded-full border border-ink/15 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100">Close collection</button>
+              <Button onClick={closeCollection} variant="tertiary" size="sm">
+                Close Collection
+              </Button>
             )}
-            <Link href={`/groups/${id}`} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-cloud transition hover:bg-[#0d1f3f]">
-              Back to group
-            </Link>
           </div>
-        ) : null}
+        )}
       </div>
 
-      {message ? (
-        <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-          {message}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
-          {error}
-        </div>
-      ) : null}
-
-      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-        {!paidPayment ? (
-          <div className="rounded-3xl border border-ink/10 bg-cloud p-6 shadow-[0_18px_45px_rgba(18,32,56,0.08)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-semibold text-ink">Pay and unlock</h2>
-                <p className="mt-2 text-sm leading-6 text-ink/70">
-                  Members pay here first. Once payment is recorded, the attached form becomes available.
-                </p>
-              </div>
-              <span className="rounded-full bg-ink/5 px-3 py-1 text-xs uppercase tracking-[0.12em] text-ink/60">
-                Locked
-              </span>
-            </div>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => startPayment('stripe')}
-                disabled={paying}
-                className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-cloud transition hover:bg-[#0d1f3f] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {paying ? 'Starting payment…' : 'Pay with Stripe'}
-              </button>
-              <button
-                type="button"
-                onClick={() => startPayment('cash')}
-                disabled={paying}
-                className="rounded-full border border-ink/15 bg-cloud px-4 py-2 text-sm font-medium text-ink transition hover:bg-[#f3efe7] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Record cash payment
-              </button>
-            </div>
-
-            {stripeClientSecret ? (
-              <div className="mt-6 rounded-2xl border border-ink/10 bg-[#f8f7f2] p-4">
-                <p className="text-sm font-medium text-ink">Stripe payment form</p>
-                <p className="mt-2 text-sm text-ink/70">Enter card details to confirm the pending payment.</p>
-                <div className="mt-4">
-                  <StripePaymentForm
-                    clientSecret={stripeClientSecret}
-                    onCompleted={handleStripeCompleted}
-                    onCancel={() => setStripeClientSecret(null)}
-                  />
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-6 rounded-2xl border border-ink/10 bg-[#f8f7f2] p-4">
-              <p className="text-sm font-medium text-ink">Payment status</p>
-              <div className="mt-3 space-y-2 text-sm text-ink/70">
-                {!myPayment ? (
-                  <p>No payments recorded yet.</p>
-                ) : (
-                  <div className="flex items-center justify-between gap-3 rounded-xl bg-cloud px-3 py-2">
-                    <span>{myPayment.method}</span>
-                    <span className="capitalize text-ink/60">{myPayment.status}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+      {/* Notifications */}
+      <div className="space-y-4 mb-10">
+        {message && (
+          <div className="float-in flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 text-emerald-800 backdrop-blur-sm">
+            <svg className="h-5 w-5 flex-shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm font-medium">{message}</p>
           </div>
-        ) : null}
+        )}
 
-        <div className="rounded-3xl border border-ink/10 bg-[#f8f7f2] p-6 shadow-[0_18px_45px_rgba(18,32,56,0.05)]">
-          <h2 className="text-2xl font-semibold text-ink">Attached form</h2>
-          {form ? (
-            <form className="mt-4 space-y-4" onSubmit={submitForm}>
-              <div className="rounded-2xl border border-ink/10 bg-cloud p-4">
-                <p className="text-lg font-medium text-ink">{form.title}</p>
-                {form.description ? <p className="mt-2 text-sm leading-6 text-ink/70">{form.description}</p> : null}
-                {isEditing ? (
-                  <p className="mt-2 rounded-full bg-amber-50 px-3 py-1 text-sm text-amber-800">You're editing your previous submission — changes will update your answers.</p>
-                ) : null}
-                <p className="mt-2 text-xs uppercase tracking-[0.12em] text-ink/60">
-                  {form.is_required ? 'Required after payment' : 'Optional after payment'}
-                </p>
+        {error && (
+          <div className="float-in flex items-center gap-3 rounded-2xl border border-rose-100 bg-rose-50/50 p-4 text-rose-800 backdrop-blur-sm">
+            <svg className="h-5 w-5 flex-shrink-0 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-[1fr_0.8fr]">
+        <div className="space-y-8">
+          {/* Payment Section */}
+          {!paidPayment && (
+            <section className="glass-card rounded-3xl border border-ink/10 p-8 shadow-glow">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-ink">Payment</h2>
+                  <p className="mt-2 text-sm leading-relaxed text-ink/60">
+                    Record your contribution to unlock the attached collection form.
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-ink/5 text-ink/40">
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
               </div>
 
-              {sortFields(form.fields).map((field) => {
-                const rawOptions = field.options as unknown
-                let options: unknown[] = []
-                if (Array.isArray(rawOptions)) {
-                  options = rawOptions
-                } else if (typeof rawOptions === 'string' && rawOptions.length > 0) {
-                  try {
-                    const parsed = JSON.parse(rawOptions)
-                    if (Array.isArray(parsed)) options = parsed
-                  } catch {
-                    // ignore parse errors
-                  }
-                } else if (rawOptions && typeof rawOptions === 'object') {
-                  // if it's an object, try to treat it as an array-like map
-                  // e.g. { "0": "a", "1": "b" }
-                  try {
-                    const maybeArray = Object.values(rawOptions as Record<string, unknown>)
-                    if (Array.isArray(maybeArray)) options = maybeArray
-                  } catch {
-                    // ignore
-                  }
-                }
-                const inputValue = answers[field.id] ?? ''
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => startPayment('stripe')} disabled={paying} variant="primary">
+                  {paying ? 'Processing...' : 'Pay with Stripe'}
+                </Button>
+                <Button onClick={() => startPayment('cash')} disabled={paying} variant="nav-secondary">
+                  Record Cash
+                </Button>
+              </div>
 
-                return (
-                  <label key={field.id} className="block">
-                    <span className="mb-2 block text-sm font-medium text-ink">
-                      {field.label}
-                      {field.is_required ? <span className="ml-1 text-ember">*</span> : null}
-                    </span>
-
-                    {field.field_type === 'textarea' ? (
-                      <textarea
-                        value={inputValue}
-                        onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
-                        placeholder={field.placeholder ?? ''}
-                        rows={4}
-                        disabled={!paidPayment}
-                        className="w-full rounded-2xl border border-ink/15 bg-cloud px-4 py-3 text-base outline-none transition focus:border-forest/50 focus:ring-2 focus:ring-forest/15 disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    ) : field.field_type === 'select' ? (
-                      <select
-                        value={inputValue}
-                        onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
-                        disabled={!paidPayment}
-                        className="w-full rounded-2xl border border-ink/15 bg-cloud px-4 py-3 text-base outline-none transition focus:border-forest/50 focus:ring-2 focus:ring-forest/15 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <option value="">Choose an option</option>
-                        {options.map((option, i) => {
-                          if (option && typeof option === 'object') {
-                            const o = option as any
-                            const val = o.value ?? o.id ?? o.label ?? JSON.stringify(o)
-                            const label = o.label ?? o.value ?? JSON.stringify(o)
-                            return (
-                              <option key={String(i)} value={String(val)}>{label}</option>
-                            )
-                          }
-                          return (
-                            <option key={String(i)} value={String(option)}>{String(option)}</option>
-                          )
-                        })}
-                      </select>
-                    ) : field.field_type === 'checkbox' ? (
-                      <div className="rounded-2xl border border-ink/15 bg-cloud px-4 py-3">
-                        <label className="flex items-center gap-3 text-sm text-ink/80">
-                          <input
-                            type="checkbox"
-                            checked={inputValue === 'true'}
-                            onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.checked ? 'true' : 'false' }))}
-                            disabled={!paidPayment}
-                            className="h-4 w-4 rounded border-ink/20"
-                          />
-                          {field.placeholder || 'Confirm this checkbox'}
-                        </label>
-                      </div>
-                    ) : (
-                      <input
-                        type={field.field_type}
-                        value={inputValue}
-                        onChange={(event) => setAnswers((current) => ({ ...current, [field.id]: event.target.value }))}
-                        placeholder={field.placeholder ?? ''}
-                        disabled={!paidPayment}
-                        className="w-full rounded-2xl border border-ink/15 bg-cloud px-4 py-3 text-base outline-none transition focus:border-forest/50 focus:ring-2 focus:ring-forest/15 disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    )}
-                  </label>
-                )
-              })}
-
-              <button
-                type="submit"
-                disabled={!paidPayment || submitting}
-                className="w-full rounded-2xl bg-forest px-4 py-3 text-sm font-semibold text-cloud transition hover:bg-[#2d5f54] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {submitting ? 'Submitting…' : isEditing ? 'Submit edits' : paidPayment ? 'Submit form' : 'Pay to unlock form'}
-              </button>
-            </form>
-          ) : (
-            <div className="mt-4 rounded-2xl border border-dashed border-ink/20 bg-cloud p-4 text-sm text-ink/70">
-              No form has been attached to this collection yet.
-              {group.role === 'admin' ? (
-                <div className="mt-4">
-                  <Link href={`/groups/${id}/collections/${collectionId}/edit`} className="text-blue-600 underline">
-                    Attach a form now
-                  </Link>
+              {stripeClientSecret && (
+                <div className="mt-8 rounded-2xl border border-ink/5 bg-ink/[0.02] p-6">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-ink/40">Secure Checkout</h3>
+                  <div className="mt-4">
+                    <StripePaymentForm
+                      clientSecret={stripeClientSecret}
+                      onCompleted={handleStripeCompleted}
+                      onCancel={() => setStripeClientSecret(null)}
+                    />
+                  </div>
                 </div>
-              ) : null}
-            </div>
+              )}
+
+              <div className="mt-8 pt-8 border-t border-ink/5">
+                <p className="text-xs font-bold uppercase tracking-widest text-ink/30">Your Status</p>
+                <div className="mt-3">
+                  {!myPayment ? (
+                    <div className="flex items-center gap-2 text-ink/50">
+                      <div className="h-2 w-2 rounded-full bg-ember animate-pulse"></div>
+                      <span className="text-sm">Pending payment</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between rounded-xl bg-ink/5 px-4 py-3">
+                      <span className="text-sm font-medium text-ink/70 capitalize">{myPayment.method}</span>
+                      <span className={`text-xs font-bold uppercase tracking-wide ${myPayment.status === 'paid' ? 'text-forest' : 'text-ember'}`}>
+                        {myPayment.status}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
           )}
+
+          {/* Form Section */}
+          <section className="glass-card rounded-3xl border border-ink/10 p-8 shadow-glow">
+            <div className="mb-6">
+              <h2 className="font-display text-2xl font-bold text-ink">Details</h2>
+              {form && (
+                <div className="mt-4 rounded-2xl bg-forest/5 border border-forest/10 p-5">
+                  <h3 className="text-lg font-bold text-forest">{form.title}</h3>
+                  {form.description && <p className="mt-2 text-sm leading-relaxed text-forest/70">{form.description}</p>}
+                  {isEditing && (
+                    <div className="mt-4 flex items-center gap-2 rounded-lg bg-amber-100/50 px-3 py-1.5 text-xs font-medium text-amber-800">
+                      <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                      </svg>
+                      Updating previous submission
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {form ? (
+              <form onSubmit={submitForm} className="space-y-6">
+                {sortFields(form.fields).map((field) => {
+                  const inputValue = answers[field.id] ?? ''
+                  return (
+                    <div key={field.id} className="space-y-2">
+                      <label className="text-sm font-bold text-ink/70">
+                        {field.label}
+                        {field.is_required && <span className="ml-1 text-ember">*</span>}
+                      </label>
+
+                      {field.field_type === 'textarea' ? (
+                        <textarea
+                          value={inputValue}
+                          onChange={(e) => setAnswers(curr => ({ ...curr, [field.id]: e.target.value }))}
+                          placeholder={field.placeholder ?? ''}
+                          rows={4}
+                          disabled={!paidPayment}
+                          className="w-full rounded-xl border border-ink/10 bg-white/50 px-4 py-3 text-ink outline-none focus:border-ink/20 focus:ring-4 focus:ring-ink/5 disabled:opacity-50 transition-all"
+                        />
+                      ) : (
+                        <input
+                          type={field.field_type}
+                          value={inputValue}
+                          onChange={(e) => setAnswers(curr => ({ ...curr, [field.id]: e.target.value }))}
+                          placeholder={field.placeholder ?? ''}
+                          disabled={!paidPayment}
+                          className="w-full rounded-xl border border-ink/10 bg-white/50 px-4 py-3 text-ink outline-none focus:border-ink/20 focus:ring-4 focus:ring-ink/5 disabled:opacity-50 transition-all"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+
+                <Button
+                  type="submit"
+                  disabled={!paidPayment || submitting}
+                  variant={paidPayment ? 'primary' : 'nav-secondary'}
+                  className="w-full"
+                >
+                  {submitting ? 'Submitting...' : isEditing ? 'Update Submission' : paidPayment ? 'Complete Form' : 'Pay to Unlock Form'}
+                </Button>
+              </form>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-ink/10 p-8 text-center">
+                <p className="text-sm text-ink/40">No form details required for this collection.</p>
+              </div>
+            )}
+          </section>
         </div>
 
-        {group.role === 'admin' ? (
-          <div className="rounded-3xl border border-ink/10 bg-[#f8f7f2] p-6 shadow-[0_18px_45px_rgba(18,32,56,0.05)]">
-            <h2 className="text-2xl font-semibold text-ink">Quick status</h2>
-            <p className="mt-2 text-sm leading-6 text-ink/70">
-              Quickly see who still owes payment and who already submitted the form.
-            </p>
-
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-ink/10 bg-cloud p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-ink/60">Paid</p>
-                <p className="mt-2 text-2xl font-semibold text-ink">{paidUserIds.size}</p>
+        <div className="space-y-8">
+          {/* Admin Stats */}
+          {group.role === 'admin' && (
+            <section className="glass-card rounded-3xl border border-ink/10 p-6 shadow-glow">
+              <h2 className="font-display text-xl font-bold text-ink">Quick Status</h2>
+              <div className="mt-6 grid grid-cols-2 gap-4">
+                <div className="rounded-2xl bg-forest/5 p-4 border border-forest/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-forest/60">Paid</p>
+                  <p className="mt-1 text-3xl font-bold text-forest">{paidUserIds.size}</p>
+                </div>
+                <div className="rounded-2xl bg-ember/5 p-4 border border-ember/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-ember/60">Unpaid</p>
+                  <p className="mt-1 text-3xl font-bold text-ember">{unpaidMembers.length}</p>
+                </div>
               </div>
-              <div className="rounded-2xl border border-ink/10 bg-cloud p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-ink/60">Unpaid</p>
-                <p className="mt-2 text-2xl font-semibold text-ink">{unpaidMembers.length}</p>
-              </div>
-            </div>
 
-            <div className="mt-5 space-y-3">
-              <div>
-                <p className="text-sm font-medium text-ink">Unpaid members</p>
-                <div className="mt-2 space-y-2">
+              <div className="mt-8 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-ink/30">Pending Members</h3>
+                <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
                   {unpaidMembers.length === 0 ? (
-                    <p className="rounded-2xl border border-dashed border-ink/20 bg-cloud px-4 py-3 text-sm text-ink/60">Everyone has paid.</p>
+                    <p className="text-sm italic text-ink/40">Everyone has contributed.</p>
                   ) : (
-                    unpaidMembers.map((member) => (
-                      <div key={member.user_id} className="rounded-2xl border border-ink/10 bg-cloud px-4 py-3 text-sm text-ink/80">
-                        <div className="flex items-center justify-between gap-3">
-                          <span>{member.display_name || member.email || `User #${member.user_id}`}</span>
-                          <span className="text-ember">Unpaid</span>
-                        </div>
+                    unpaidMembers.map(member => (
+                      <div key={member.user_id} className="flex items-center justify-between rounded-xl bg-ink/5 p-3">
+                        <span className="text-xs font-medium text-ink/70 truncate mr-2">
+                          {member.display_name || member.email}
+                        </span>
+                        <span className="text-[10px] font-bold text-ember uppercase tracking-tighter shrink-0">Unpaid</span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        ) : null}
-      </section>
+            </section>
+          )}
 
-      {group.role === 'admin' && form ? (
-        <section className="rounded-3xl border border-ink/10 bg-cloud p-6 shadow-[0_18px_45px_rgba(18,32,56,0.08)]">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-ink">Responses</h2>
-              <p className="mt-2 text-sm leading-6 text-ink/70">
-                Review every submission and its answers in one place.
-              </p>
-            </div>
-            <p className="text-sm text-ink/60">{submissions.length} submission{submissions.length === 1 ? '' : 's'}</p>
+          <div className="flex justify-center">
+            <Button href={`/groups/${id}`} variant="nav-secondary" size="sm">
+              &larr; Back to Group
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Response Table (Admin Only) */}
+      {group.role === 'admin' && form && (
+        <section className="mt-16 pt-16 border-t border-ink/10">
+          <div className="mb-8 flex items-baseline justify-between">
+            <h2 className="font-display text-3xl font-bold text-ink">Submissions</h2>
+            <span className="text-sm font-medium text-ink/40">{submissions.length} Total</span>
           </div>
 
-          <div className="mt-5 space-y-4">
+          <div className="grid gap-6">
             {submissions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-ink/20 bg-[#f8f7f2] px-4 py-5 text-sm text-ink/60">
-                No submissions yet.
+              <div className="glass-card rounded-3xl border border-dashed border-ink/10 p-12 text-center">
+                <p className="text-ink/40">Waiting for the first response...</p>
               </div>
             ) : (
-              submissions.map((submission) => {
+              submissions.map(submission => {
                 const answers = submissionAnswers[submission.id] ?? []
                 const payment = paymentByUser.get(String(submission.user_id))
                 return (
-                  <article key={submission.id} className="rounded-2xl border border-ink/10 bg-[#f8f7f2] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
+                  <article key={submission.id} className="glass-card overflow-hidden rounded-3xl border border-ink/10 shadow-glow">
+                    <div className="flex items-center justify-between bg-ink/5 px-6 py-4">
                       <div>
-                        <p className="text-base font-semibold text-ink">
-                          {members.find((member) => member.user_id === submission.user_id)?.display_name || members.find((member) => member.user_id === submission.user_id)?.email || `User #${submission.user_id}`}
+                        <p className="text-sm font-bold text-ink">
+                          {members.find(m => m.user_id === submission.user_id)?.display_name || 'Anonymous User'}
                         </p>
-                        <p className="text-sm text-ink/60">
-                          Submitted {submission.submitted_at ? formatDate(submission.submitted_at) : 'recently'}
+                        <p className="text-[10px] text-ink/40 uppercase tracking-widest mt-0.5">
+                          {submission.submitted_at ? formatDate(submission.submitted_at) : 'Recently'}
                         </p>
                       </div>
-                      <div className="rounded-full bg-ink/5 px-3 py-1 text-xs uppercase tracking-[0.12em] text-ink/60">
-                        {payment?.status === 'paid' ? 'Paid' : payment?.status || 'No payment'}
-                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${payment?.status === 'paid' ? 'bg-forest/10 text-forest' : 'bg-ember/10 text-ember'}`}>
+                        {payment?.status === 'paid' ? 'Paid' : 'Unconfirmed'}
+                      </span>
                     </div>
-
-                    <div className="mt-4 grid gap-3">
-                      {answers.length === 0 ? (
-                        <p className="rounded-xl border border-dashed border-ink/20 bg-cloud px-4 py-3 text-sm text-ink/60">No answers saved yet.</p>
-                      ) : (
-                        sortFields(form.fields).map((field) => {
-                          const answer = answers.find((item) => String(item.field_id) === String(field.id))
-                          if (!answer) return null
-                          const value = typeof answer.value_text === 'string' && answer.value_text.length > 0
-                            ? answer.value_text
-                            : answer.value_json !== undefined && answer.value_json !== null
-                              ? JSON.stringify(answer.value_json)
-                              : 'No value'
-
-                          return (
-                            <div key={field.id} className="rounded-xl border border-ink/10 bg-cloud px-4 py-3">
-                              <p className="text-xs uppercase tracking-[0.12em] text-ink/60">{field.label}</p>
-                              <p className="mt-1 text-sm text-ink">{value}</p>
-                            </div>
-                          )
-                        })
-                      )}
+                    <div className="p-6 grid gap-4 sm:grid-cols-2">
+                      {sortFields(form.fields).map(field => {
+                        const answer = answers.find(a => String(a.field_id) === String(field.id))
+                        return (
+                          <div key={field.id} className="space-y-1">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">{field.label}</p>
+                            <p className="text-sm font-medium text-ink/80">
+                              {answer?.value_text || (answer?.value_json ? JSON.stringify(answer.value_json) : '—')}
+                            </p>
+                          </div>
+                        )
+                      })}
                     </div>
                   </article>
                 )
@@ -758,7 +719,7 @@ export default function Page() {
             )}
           </div>
         </section>
-      ) : null}
+      )}
     </main>
   )
 }
