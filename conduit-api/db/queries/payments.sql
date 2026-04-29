@@ -44,10 +44,12 @@ WHERE id = $1
 RETURNING *;
 
 -- name: ListPaymentsByCollection :many
-SELECT *
+SELECT DISTINCT ON (user_id) *
 FROM payments
 WHERE collection_id = $1
-ORDER BY id DESC;
+ORDER BY user_id, 
+         CASE WHEN status = 'paid' THEN 1 ELSE 2 END, 
+         created_at DESC;
 
 -- name: GetPaymentByStripePaymentIntentID :one
 SELECT *

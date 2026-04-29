@@ -84,6 +84,30 @@ func int8ToInterface(v pgtype.Int8) interface{} {
 	return v.Int64
 }
 
+func failDuplicatePendingPayments(ctx context.Context, q db.Querier, payment db.Payment) error {
+	payments, err := q.ListPaymentsByCollection(ctx, payment.CollectionID)
+	if err != nil {
+		return err
+	}
+
+	for _, otherPayment := range payments {
+		if otherPayment.ID == payment.ID {
+			continue
+		}
+		if otherPayment.UserID != payment.UserID {
+			continue
+		}
+		if otherPayment.Status != db.PaymentStatusPending {
+			continue
+		}
+		if _, err := q.MarkPaymentFailed(ctx, otherPayment.ID); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // CreatePayment creates a pending payment for an active collection.
 func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	callerID, ok := userIDFromContext(c)
@@ -114,6 +138,18 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	if collection.Status == db.CollectionStatusClosed {
 		c.JSON(http.StatusConflict, gin.H{"error": "collection is closed"})
 		return
+	}
+
+	existingPayments, err := h.db.ListPaymentsByCollection(c.Request.Context(), collection.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to inspect existing payments"})
+		return
+	}
+	for _, existingPayment := range existingPayments {
+		if existingPayment.UserID == callerID && existingPayment.Status == db.PaymentStatusPaid {
+			c.JSON(http.StatusConflict, gin.H{"error": "payment already completed for this collection"})
+			return
+		}
 	}
 
 	subscription, err := h.db.GetOrganizationSubscriptionByGroup(c.Request.Context(), collection.GroupID)
@@ -213,6 +249,10 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 			}
 		}
 
+		if err := failDuplicatePendingPayments(c.Request.Context(), q, payment); err != nil {
+			return err
+		}
+
 		_, err = q.IncrementUsageForPayment(c.Request.Context(), db.IncrementUsageForPaymentParams{
 			GroupID:          collection.GroupID,
 			PeriodStart:      usage.PeriodStart,
@@ -255,7 +295,8 @@ func (h *PaymentsHandler) HandleStripeWebhook(c *gin.Context) {
 			return
 		}
 
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stripe webhook"})
+		log.Printf("invalid stripe webhook: method=%s path=%s err=%v", c.Request.Method, c.Request.URL.Path, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stripe webhook", "details": err.Error()})
 		return
 	}
 
@@ -338,6 +379,16 @@ func (h *PaymentsHandler) ListPaymentsByCollection(c *gin.Context) {
 		return
 	}
 
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, collection.GroupID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify group access"})
+		return
+	}
+
 	payments, err := h.db.ListPaymentsByCollection(c.Request.Context(), collection.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list payments"})
@@ -346,6 +397,9 @@ func (h *PaymentsHandler) ListPaymentsByCollection(c *gin.Context) {
 
 	out := make([]gin.H, 0, len(payments))
 	for _, payment := range payments {
+		if role != db.MembershipRoleAdmin && role != db.MembershipRoleCollector && payment.UserID != callerID {
+			continue
+		}
 		out = append(out, paymentResponse(payment, nil))
 	}
 

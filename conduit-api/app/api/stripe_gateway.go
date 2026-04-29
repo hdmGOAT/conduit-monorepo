@@ -86,7 +86,7 @@ func (s *stripeClient) ParseWebhookEvent(payload []byte, signature string) (stri
 		return stripeWebhookEvent{}, errStripeNotConfigured
 	}
 
-	event, err := webhook.ConstructEvent(payload, signature, s.webhookSecret)
+	event, err := webhook.ConstructEventWithOptions(payload, signature, s.webhookSecret, webhook.ConstructEventOptions{IgnoreAPIVersionMismatch: true})
 	if err != nil {
 		return stripeWebhookEvent{}, err
 	}

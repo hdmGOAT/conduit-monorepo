@@ -42,6 +42,8 @@ type fakeDB struct {
 	getCollectionFormByIDFn              func(ctx context.Context, id int64) (db.CollectionForm, error)
 	listCollectionFormFieldsFn           func(ctx context.Context, formID int64) ([]db.CollectionFormField, error)
 	createCollectionFormFieldFn          func(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error)
+	updateCollectionFormFieldFn          func(ctx context.Context, arg db.UpdateCollectionFormFieldParams) (db.CollectionFormField, error)
+	deleteCollectionFormFieldFn          func(ctx context.Context, id int64) (db.CollectionFormField, error)
 	createFormSubmissionFn               func(ctx context.Context, arg db.CreateFormSubmissionParams) (db.CollectionFormSubmission, error)
 	addFormAnswerFn                      func(ctx context.Context, arg db.AddFormAnswerParams) (db.CollectionFormAnswer, error)
 	getPaymentByIDFn                     func(ctx context.Context, id int64) (db.Payment, error)
@@ -108,6 +110,20 @@ func (f *fakeDB) CreateCollectionForm(ctx context.Context, arg db.CreateCollecti
 func (f *fakeDB) CreateCollectionFormField(ctx context.Context, arg db.CreateCollectionFormFieldParams) (db.CollectionFormField, error) {
 	if f.createCollectionFormFieldFn != nil {
 		return f.createCollectionFormFieldFn(ctx, arg)
+	}
+	return db.CollectionFormField{}, nil
+}
+
+func (f *fakeDB) UpdateCollectionFormField(ctx context.Context, arg db.UpdateCollectionFormFieldParams) (db.CollectionFormField, error) {
+	if f.updateCollectionFormFieldFn != nil {
+		return f.updateCollectionFormFieldFn(ctx, arg)
+	}
+	return db.CollectionFormField{}, nil
+}
+
+func (f *fakeDB) DeleteCollectionFormField(ctx context.Context, id int64) (db.CollectionFormField, error) {
+	if f.deleteCollectionFormFieldFn != nil {
+		return f.deleteCollectionFormFieldFn(ctx, id)
 	}
 	return db.CollectionFormField{}, nil
 }

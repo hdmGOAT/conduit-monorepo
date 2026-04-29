@@ -146,6 +146,35 @@ func newSignedStripeWebhookRequest(t *testing.T, eventType, paymentIntentID, sec
 	return req
 }
 
+func TestStripeWebhook_InvalidWebhookIncludesDetails(t *testing.T) {
+	stripeGateway := &fakeStripeGateway{
+		parseWebhookEventFn: func(payload []byte, signature string) (stripeWebhookEvent, error) {
+			return stripeWebhookEvent{}, errors.New("signature verification failed")
+		},
+	}
+	router := newTestRouterWithDeps(&fakeAuthService{}, &fakeDB{}, stripeGateway)
+
+	req, err := http.NewRequest(http.MethodPost, "/api/webhooks/stripe", strings.NewReader(`{"type":"payment_intent.succeeded"}`))
+	if err != nil {
+		t.Fatalf("failed to build webhook request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Stripe-Signature", "t=123,v1=bad")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"error":"invalid stripe webhook"`) {
+		t.Fatalf("expected invalid webhook error, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"details":"signature verification failed"`) {
+		t.Fatalf("expected verbose details in response, got %s", resp.Body.String())
+	}
+}
+
 func TestCreatePayment_StripeCreatesPaymentIntent(t *testing.T) {
 	called := false
 	fakeStripe := &fakeStripeGateway{

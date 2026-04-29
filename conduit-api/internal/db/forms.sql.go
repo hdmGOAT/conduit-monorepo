@@ -175,6 +175,30 @@ func (q *Queries) DeleteCollectionForm(ctx context.Context, id int64) (Collectio
 	return i, err
 }
 
+const deleteCollectionFormField = `-- name: DeleteCollectionFormField :one
+DELETE FROM collection_form_fields
+WHERE id = $1
+RETURNING id, form_id, field_key, label, field_type, placeholder, is_required, options, sort_order, created_at
+`
+
+func (q *Queries) DeleteCollectionFormField(ctx context.Context, id int64) (CollectionFormField, error) {
+	row := q.db.QueryRow(ctx, deleteCollectionFormField, id)
+	var i CollectionFormField
+	err := row.Scan(
+		&i.ID,
+		&i.FormID,
+		&i.FieldKey,
+		&i.Label,
+		&i.FieldType,
+		&i.Placeholder,
+		&i.IsRequired,
+		&i.Options,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const deleteFormAnswer = `-- name: DeleteFormAnswer :one
 DELETE FROM collection_form_answers
 WHERE id = $1
@@ -430,6 +454,51 @@ func (q *Queries) UpdateCollectionForm(ctx context.Context, arg UpdateCollection
 		&i.IsRequired,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateCollectionFormField = `-- name: UpdateCollectionFormField :one
+UPDATE collection_form_fields
+SET field_key = $2, label = $3, field_type = $4::form_field_type, placeholder = $5, is_required = $6, options = $7, sort_order = $8
+WHERE id = $1
+RETURNING id, form_id, field_key, label, field_type, placeholder, is_required, options, sort_order, created_at
+`
+
+type UpdateCollectionFormFieldParams struct {
+	ID          int64         `json:"id"`
+	FieldKey    string        `json:"field_key"`
+	Label       string        `json:"label"`
+	Column4     FormFieldType `json:"column_4"`
+	Placeholder pgtype.Text   `json:"placeholder"`
+	IsRequired  bool          `json:"is_required"`
+	Options     []byte        `json:"options"`
+	SortOrder   int32         `json:"sort_order"`
+}
+
+func (q *Queries) UpdateCollectionFormField(ctx context.Context, arg UpdateCollectionFormFieldParams) (CollectionFormField, error) {
+	row := q.db.QueryRow(ctx, updateCollectionFormField,
+		arg.ID,
+		arg.FieldKey,
+		arg.Label,
+		arg.Column4,
+		arg.Placeholder,
+		arg.IsRequired,
+		arg.Options,
+		arg.SortOrder,
+	)
+	var i CollectionFormField
+	err := row.Scan(
+		&i.ID,
+		&i.FormID,
+		&i.FieldKey,
+		&i.Label,
+		&i.FieldType,
+		&i.Placeholder,
+		&i.IsRequired,
+		&i.Options,
+		&i.SortOrder,
+		&i.CreatedAt,
 	)
 	return i, err
 }

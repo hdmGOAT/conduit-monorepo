@@ -174,10 +174,12 @@ func (q *Queries) GetPaymentByStripePaymentIntentID(ctx context.Context, stripeP
 }
 
 const listPaymentsByCollection = `-- name: ListPaymentsByCollection :many
-SELECT id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
+SELECT DISTINCT ON (user_id) id, user_id, collection_id, base_amount, fee_amount, total_amount, status, method, stripe_payment_intent_id, created_at
 FROM payments
 WHERE collection_id = $1
-ORDER BY id DESC
+ORDER BY user_id, 
+         CASE WHEN status = 'paid' THEN 1 ELSE 2 END, 
+         created_at DESC
 `
 
 func (q *Queries) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]Payment, error) {
