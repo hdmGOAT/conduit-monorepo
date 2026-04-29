@@ -1,5 +1,4 @@
 import { Fraunces, Space_Grotesk } from "next/font/google";
-import Link from "next/link";
 import { Button } from "@/components/button";
 
 const fraunces = Fraunces({

@@ -178,8 +178,8 @@ SELECT DISTINCT ON (user_id) id, user_id, collection_id, base_amount, fee_amount
 FROM payments
 WHERE collection_id = $1
 ORDER BY user_id, 
-         CASE WHEN status = 'paid' THEN 1 ELSE 2 END, 
-         created_at DESC
+		 CASE WHEN status = 'paid' THEN 1 ELSE 2 END, 
+		 created_at DESC
 `
 
 func (q *Queries) ListPaymentsByCollection(ctx context.Context, collectionID int64) ([]Payment, error) {

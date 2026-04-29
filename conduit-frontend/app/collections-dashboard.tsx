@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/button'
 import appAPIClient from '@/lib/api/httpClient'
 import Link from 'next/link'
 
@@ -50,7 +49,6 @@ function getDaysUntilDeadline(deadline: string): number {
 
 export function CollectionsDashboard() {
   const [collections, setCollections] = useState<TypedCollection[]>([])
-  const [groups, setGroups] = useState<Map<string, string>>(new Map())
   const [currentTab, setCurrentTab] = useState<'pending' | 'completed' | 'overdue'>('pending')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -69,7 +67,6 @@ export function CollectionsDashboard() {
         groupsList.forEach((g: Group) => {
           groupMap.set(g.id, g.name)
         })
-        setGroups(groupMap)
 
         // Fetch all collections from all groups
         const allCollections: TypedCollection[] = []
