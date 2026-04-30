@@ -20,6 +20,8 @@ type PaymentsHandler struct {
 	stripe stripeGateway
 }
 
+const stripeMinimumAmountCentavos int64 = 10000
+
 func NewPaymentsHandler(dbq db.Querier, gateways ...stripeGateway) *PaymentsHandler {
 	var gateway stripeGateway
 	if len(gateways) > 0 {
@@ -171,6 +173,16 @@ func (h *PaymentsHandler) CreatePayment(c *gin.Context) {
 	method := db.PaymentMethod(req.Method)
 	var stripeIntent *stripePaymentIntent
 	if method == db.PaymentMethodStripe {
+		if baseAmount < stripeMinimumAmountCentavos {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":          "stripe requires a minimum amount of PHP 100.00",
+				"code":           "stripe_minimum_amount",
+				"minimum_amount": stripeMinimumAmountCentavos,
+				"amount":         baseAmount,
+			})
+			return
+		}
+
 		if h.stripe == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe payments are not configured"})
 			return

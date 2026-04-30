@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"conduit-monorepo/conduit-api/internal/db"
 
@@ -274,6 +275,106 @@ func TestListMemberships_Success(t *testing.T) {
 	if len(out) != 1 || out[0]["user_id"] == nil {
 		t.Fatalf("unexpected response: %v", out)
 	}
+}
+
+func TestGetSubscriptionSummary_Success(t *testing.T) {
+	periodStart := pgtype.Timestamptz{Time: mustParseTime(t, "2026-04-01T00:00:00Z"), Valid: true}
+	periodEnd := pgtype.Timestamptz{Time: mustParseTime(t, "2026-04-30T23:59:59Z"), Valid: true}
+
+	fake := &fakeDB{
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
+		},
+		getOrganizationSubscriptionByGroupFn: func(ctx context.Context, groupID int64) (db.OrganizationSubscription, error) {
+			return db.OrganizationSubscription{GroupID: groupID, Tier: db.SubscriptionTierFree, MemberLimit: 25, TransactionCapacityPerPeriod: 250, TransactionFeeBps: 50}, nil
+		},
+		countMembersByGroupFn: func(ctx context.Context, groupID int64) (int64, error) {
+			return 10, nil
+		},
+		getUsagePeriodByGroupAndStartFn: func(ctx context.Context, arg db.GetUsagePeriodByGroupAndStartParams) (db.SubscriptionUsagePeriod, error) {
+			return db.SubscriptionUsagePeriod{GroupID: arg.GroupID, PeriodStart: periodStart, PeriodEnd: periodEnd, TransactionCount: 73}, nil
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/groups/5/subscription", nil)
+	req.Header.Set("Authorization", "Bearer valid-access")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if out["tier"] != string(db.SubscriptionTierFree) {
+		t.Fatalf("expected tier free, got %v", out["tier"])
+	}
+	if out["member_usage"] != float64(10) || out["member_remaining"] != float64(15) {
+		t.Fatalf("unexpected member usage values: %v", out)
+	}
+	if out["transaction_usage"] != float64(73) || out["transaction_remaining"] != float64(177) {
+		t.Fatalf("unexpected transaction usage values: %v", out)
+	}
+	if out["is_free_tier"] != true {
+		t.Fatalf("expected free tier true, got %v", out["is_free_tier"])
+	}
+}
+
+func TestGetSubscriptionSummary_NoUsageRowDefaultsToZero(t *testing.T) {
+	fake := &fakeDB{
+		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleAdmin}}, nil
+		},
+		getOrganizationSubscriptionByGroupFn: func(ctx context.Context, groupID int64) (db.OrganizationSubscription, error) {
+			return db.OrganizationSubscription{GroupID: groupID, Tier: db.SubscriptionTierStarter, MemberLimit: 50, TransactionCapacityPerPeriod: 1000, TransactionFeeBps: 25}, nil
+		},
+		countMembersByGroupFn: func(ctx context.Context, groupID int64) (int64, error) {
+			return 4, nil
+		},
+		getUsagePeriodByGroupAndStartFn: func(ctx context.Context, arg db.GetUsagePeriodByGroupAndStartParams) (db.SubscriptionUsagePeriod, error) {
+			return db.SubscriptionUsagePeriod{}, sql.ErrNoRows
+		},
+	}
+
+	svc := &fakeAuthService{parseAccessTokenFn: func(accessToken string) (int64, error) { return 42, nil }}
+	router := newTestRouterWithDeps(svc, fake)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/groups/5/subscription", nil)
+	req.Header.Set("Authorization", "Bearer valid-access")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+
+	if out["transaction_usage"] != float64(0) || out["transaction_remaining"] != float64(1000) {
+		t.Fatalf("unexpected fallback usage values: %v", out)
+	}
+	if out["period_start"] == nil || out["period_end"] == nil {
+		t.Fatalf("expected billing period bounds, got: %v", out)
+	}
+}
+
+func mustParseTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("invalid test time %q: %v", value, err)
+	}
+	return parsed
 }
 
 func TestRequestToJoin_OpenGroup_Succeeds(t *testing.T) {

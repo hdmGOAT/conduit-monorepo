@@ -90,8 +90,10 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 }
 
 type fakeStripeGateway struct {
-	createPaymentIntentFn func(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error)
-	parseWebhookEventFn   func(payload []byte, signature string) (stripeWebhookEvent, error)
+	createPaymentIntentFn     func(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error)
+	createCheckoutSessionFn   func(ctx context.Context, priceID, successURL, cancelURL, clientReferenceID string, metadata map[string]string) (*stripeCheckoutSession, error)
+	retrieveCheckoutSessionFn func(ctx context.Context, sessionID string) (*stripeCheckoutSession, error)
+	parseWebhookEventFn       func(payload []byte, signature string) (stripeWebhookEvent, error)
 }
 
 func (f *fakeStripeGateway) CreatePaymentIntent(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error) {
@@ -106,6 +108,20 @@ func (f *fakeStripeGateway) ParseWebhookEvent(payload []byte, signature string) 
 		return f.parseWebhookEventFn(payload, signature)
 	}
 	return stripeWebhookEvent{}, nil
+}
+
+func (f *fakeStripeGateway) CreateCheckoutSession(ctx context.Context, priceID, successURL, cancelURL, clientReferenceID string, metadata map[string]string) (*stripeCheckoutSession, error) {
+	if f.createCheckoutSessionFn != nil {
+		return f.createCheckoutSessionFn(ctx, priceID, successURL, cancelURL, clientReferenceID, metadata)
+	}
+	return &stripeCheckoutSession{}, nil
+}
+
+func (f *fakeStripeGateway) RetrieveCheckoutSession(ctx context.Context, sessionID string) (*stripeCheckoutSession, error) {
+	if f.retrieveCheckoutSessionFn != nil {
+		return f.retrieveCheckoutSessionFn(ctx, sessionID)
+	}
+	return &stripeCheckoutSession{}, nil
 }
 
 func newSignedStripeWebhookRequest(t *testing.T, eventType, paymentIntentID, secret string) *http.Request {

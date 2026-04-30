@@ -91,9 +91,14 @@ export default function EditGroupPage() {
               Refine the group identity or adjust the privacy settings. Changes reflect immediately for all members.
             </p>
           </div>
-          <Button href={`/groups/${id}`} variant="nav-secondary" size="sm">
-            Cancel Changes
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button href={`/groups/${id}/billing`} variant="nav-secondary" size="sm">
+              Billing & Upgrade
+            </Button>
+            <Button href={`/groups/${id}`} variant="nav-secondary" size="sm">
+              Cancel Changes
+            </Button>
+          </div>
         </div>
 
         <div className="float-in delay-1">
