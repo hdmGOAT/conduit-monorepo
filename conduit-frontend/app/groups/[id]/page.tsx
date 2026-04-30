@@ -359,6 +359,18 @@ export default function Page() {
                         <Button href={`/groups/${id}/billing`} variant="nav-secondary" size="sm">
                           Billing & Upgrade
                         </Button>
+                        <Button href={`/groups/${id}/collector/scan`} variant="nav-secondary" size="sm">
+                          Scan & Verify Payments
+                        </Button>
+                      </div>
+                    ) : group.role === 'collector' || group.role === 'moderator' ? (
+                      <div className="mt-6 space-y-3">
+                        <Button href={`/groups/${id}/collector/scan`} variant="primary" size="sm" className="w-full">
+                          Scan & Verify Payments
+                        </Button>
+                        <button onClick={leaveGroup} disabled={submitting} className="text-xs font-bold uppercase tracking-widest text-ember hover:underline disabled:opacity-50">
+                          Leave Group
+                        </button>
                       </div>
                     ) : (
                       <div className="mt-6">

@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"image/png"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/skip2/go-qrcode"
 	stripe "github.com/stripe/stripe-go/v84"
 )
 
@@ -497,4 +501,86 @@ func (h *PaymentsHandler) ConfirmCashPayment(c *gin.Context) {
 		"payment":      paymentResponse(confirmedPayment, nil),
 		"cash_payment": cashPaymentResponse(confirmedCashPayment),
 	})
+}
+
+// GetPaymentQRCode generates and serves a QR code for a cash payment.
+// The QR code contains the payment ID in the format: payment:{payment_id}
+// Caller must have access to the group and the payment must be a cash payment.
+func (h *PaymentsHandler) GetPaymentQRCode(c *gin.Context) {
+	callerID, ok := userIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	paymentID, err := strconv.ParseInt(c.Param("payment_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payment id"})
+		return
+	}
+
+	// Fetch payment
+	payment, err := h.db.GetPaymentByID(c.Request.Context(), paymentID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "payment not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment"})
+		return
+	}
+
+	// Only cash payments have QR codes
+	if payment.Method != db.PaymentMethodCash {
+		c.JSON(http.StatusConflict, gin.H{"error": "payment method is not cash"})
+		return
+	}
+
+	// Verify caller has access to the group
+	collection, err := h.db.GetCollection(c.Request.Context(), payment.CollectionID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "collection not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load payment collection"})
+		return
+	}
+
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, collection.GroupID)
+	if err != nil {
+		if isNoRowsErr(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify group access"})
+		return
+	}
+
+	// Allow admin, member (who owns the payment), or collector to view the QR code
+	if role != db.MembershipRoleAdmin && role != db.MembershipRoleCollector && payment.UserID != callerID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		return
+	}
+
+	// Generate QR code data containing payment ID
+	qrData := fmt.Sprintf("payment:%d", payment.ID)
+	qrCode, err := qrcode.New(qrData, qrcode.High)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate qr code"})
+		return
+	}
+
+	// Encode QR code to image
+	img := qrCode.Image(256) // 256x256 pixels
+
+	// Write PNG to buffer
+	buf := new(bytes.Buffer)
+	err = png.Encode(buf, img)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to encode png"})
+		return
+	}
+
+	// Send PNG as response
+	c.Data(http.StatusOK, "image/png", buf.Bytes())
 }

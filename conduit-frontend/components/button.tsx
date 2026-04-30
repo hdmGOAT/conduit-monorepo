@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ButtonHTMLAttributes, ReactNode } from "react";
 
-type ButtonVariant = "primary" | "secondary" | "tertiary" | "nav-primary" | "nav-secondary";
+type ButtonVariant = "primary" | "secondary" | "tertiary" | "nav-primary" | "nav-secondary" | "outline";
 type ButtonSize = "sm" | "md" | "lg";
 
 type ButtonProps = {
@@ -24,6 +24,8 @@ const variantStyles: Record<ButtonVariant, string> = {
     "rounded-full border border-ink/20 bg-cloud text-ink hover:bg-[#172850] hover:text-stone-100 transition-all",
   "nav-secondary":
     "rounded-full border border-ink/20 bg-cloud text-ink hover:bg-[#344873] hover:text-stone-100 active:scale-[0.98] active:bg-forest active:text-cloud focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink/30 transition-all",
+  outline:
+    "rounded-xl border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 transition-colors",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

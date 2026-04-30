@@ -15,9 +15,16 @@ export async function proxyRequest(request: NextRequest, targetPath: string) {
   }
 
   const res = await fetch(url, init)
-  const responseBody = await res.text()
-
   const contentType = res.headers.get('content-type') ?? 'application/json'
+  
+  // Handle binary responses (images, PDFs, etc.)
+  let responseBody: Buffer | string
+  if (contentType.includes('image') || contentType.includes('application/pdf') || contentType.includes('application/octet-stream')) {
+    responseBody = Buffer.from(await res.arrayBuffer())
+  } else {
+    responseBody = await res.text()
+  }
+
   const nextRes = new NextResponse(responseBody, { 
     status: res.status, 
     headers: { 
