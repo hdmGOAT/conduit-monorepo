@@ -23,32 +23,40 @@ type meResponse struct {
 	PFPURL      string `json:"pfp_url"`
 }
 
+// use the centralized fake in fake_db_test.go
 type validationErrorResponse struct {
-	Error   string `json:"error"`
-	Details []struct {
-		Field   string `json:"field"`
-		Message string `json:"message"`
-	} `json:"details"`
+	Error   string             `json:"error"`
+	Details []fieldErrorDetail `json:"details"`
 }
-
 type fakeAuthService struct {
 	registerFn         func(ctx context.Context, email, password, displayName string) (auth.Session, error)
 	loginFn            func(ctx context.Context, email, password string) (auth.Session, error)
 	refreshFn          func(ctx context.Context, refreshToken string) (auth.Session, error)
 	logoutFn           func(ctx context.Context, refreshToken string) error
+	requestResetFn     func(ctx context.Context, email string) error
+	resetPasswordFn    func(ctx context.Context, token, newPassword string) error
 	getUserFn          func(ctx context.Context, userID int64) (db.User, error)
 	parseAccessTokenFn func(accessToken string) (int64, error)
 }
 
 func (f *fakeAuthService) Register(ctx context.Context, email, password, displayName string) (auth.Session, error) {
+	if f.registerFn == nil {
+		return auth.Session{}, errors.New("unexpected register call")
+	}
 	return f.registerFn(ctx, email, password, displayName)
 }
 
 func (f *fakeAuthService) Login(ctx context.Context, email, password string) (auth.Session, error) {
+	if f.loginFn == nil {
+		return auth.Session{}, errors.New("unexpected login call")
+	}
 	return f.loginFn(ctx, email, password)
 }
 
 func (f *fakeAuthService) Refresh(ctx context.Context, refreshToken string) (auth.Session, error) {
+	if f.refreshFn == nil {
+		return auth.Session{}, errors.New("unexpected refresh call")
+	}
 	return f.refreshFn(ctx, refreshToken)
 }
 
@@ -57,6 +65,20 @@ func (f *fakeAuthService) Logout(ctx context.Context, refreshToken string) error
 		return nil
 	}
 	return f.logoutFn(ctx, refreshToken)
+}
+
+func (f *fakeAuthService) RequestPasswordReset(ctx context.Context, email string) error {
+	if f.requestResetFn == nil {
+		return nil
+	}
+	return f.requestResetFn(ctx, email)
+}
+
+func (f *fakeAuthService) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if f.resetPasswordFn == nil {
+		return nil
+	}
+	return f.resetPasswordFn(ctx, token, newPassword)
 }
 
 func (f *fakeAuthService) GetUser(ctx context.Context, userID int64) (db.User, error) {
@@ -168,6 +190,82 @@ func TestAuthRefreshMissingToken(t *testing.T) {
 	}
 }
 
+func TestAuthForgotPasswordAlwaysReturnsOK(t *testing.T) {
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		requestResetFn: func(ctx context.Context, email string) error {
+			return errors.New("email provider unavailable")
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/forgot-password", map[string]string{
+		"email": "user@example.com",
+	})
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+}
+
+func TestAuthResetPasswordInvalidToken(t *testing.T) {
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		resetPasswordFn: func(ctx context.Context, token, newPassword string) error {
+			return auth.ErrInvalidPasswordResetToken
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/reset-password", map[string]string{
+		"token":        "expired-token",
+		"new_password": "newpassword123",
+	})
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.Code)
+	}
+}
+
+func TestAuthResetPasswordSuccess(t *testing.T) {
+	called := false
+	router := newTestRouter(&fakeAuthService{
+		registerFn: failRegister,
+		loginFn:    failLogin,
+		refreshFn:  failRefresh,
+		resetPasswordFn: func(ctx context.Context, token, newPassword string) error {
+			called = true
+			if token != "valid-token" {
+				return errors.New("unexpected token")
+			}
+			if newPassword != "newpassword123" {
+				return errors.New("unexpected password")
+			}
+			return nil
+		},
+		getUserFn:          failGetUser,
+		parseAccessTokenFn: failParseToken,
+	})
+
+	resp := performJSONRequest(router, http.MethodPost, "/api/auth/reset-password", map[string]string{
+		"token":        "valid-token",
+		"new_password": "newpassword123",
+	})
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.Code)
+	}
+	if !called {
+		t.Fatal("expected reset password service to be called")
+	}
+}
+
 func TestAuthRefreshSuccess(t *testing.T) {
 	router := newTestRouter(&fakeAuthService{
 		registerFn: failRegister,
@@ -276,6 +374,8 @@ func defaultFakeService() *fakeAuthService {
 		registerFn:         failRegister,
 		loginFn:            failLogin,
 		refreshFn:          failRefresh,
+		requestResetFn:     failRequestPasswordReset,
+		resetPasswordFn:    failResetPassword,
 		getUserFn:          failGetUser,
 		parseAccessTokenFn: failParseToken,
 	}
@@ -293,6 +393,14 @@ func failRefresh(ctx context.Context, refreshToken string) (auth.Session, error)
 	return auth.Session{}, errors.New("unexpected refresh call")
 }
 
+func failRequestPasswordReset(ctx context.Context, email string) error {
+	return errors.New("unexpected request password reset call")
+}
+
+func failResetPassword(ctx context.Context, token, newPassword string) error {
+	return errors.New("unexpected reset password call")
+}
+
 func failGetUser(ctx context.Context, userID int64) (db.User, error) {
 	return db.User{}, errors.New("unexpected get user call")
 }
@@ -304,7 +412,11 @@ func failParseToken(accessToken string) (int64, error) {
 func newTestRouter(service AuthService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	handler := NewAuthHandler(service, false, 3600)
-	return NewRouter(handler, service)
+	groupsHandler := NewGroupsHandler(nil)
+	collectionsHandler := NewCollectionsHandler(nil)
+	paymentsHandler := NewPaymentsHandler(nil)
+	formsHandler := NewFormsHandler(nil)
+	return NewRouter(handler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, service)
 }
 
 func performJSONRequest(router *gin.Engine, method, path string, body any) *httptest.ResponseRecorder {

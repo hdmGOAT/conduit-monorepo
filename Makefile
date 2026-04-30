@@ -4,10 +4,13 @@ DB_USER ?= conduit
 DB_PASSWORD ?= conduit
 DB_NAME ?= conduit
 DB_PORT ?= 5432
+BACKEND_PORT ?= 8080
+NGROK_BIN ?= ngrok
+NGROK_DOMAIN ?= smooth-manatee-immortal.ngrok-free.app
 DB_URL_LOCAL := postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable
 DB_URL_DOCKER := postgres://$(DB_USER):$(DB_PASSWORD)@postgres:5432/$(DB_NAME)?sslmode=disable
 
-.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate docs-api
+.PHONY: dev dev-api dev-frontend lint lint-api lint-frontend test test-api test-frontend build-api ci db-up db-down db-logs db-reset migrate-up migrate-down sqlc-generate docs-api ngrok-backend
 
 dev:
 	@set -euo pipefail; \
@@ -51,6 +54,11 @@ db-down:
 
 db-logs:
 	docker compose logs -f postgres
+	test-api-race:
+		cd conduit-api && go test -race ./...
+
+	test-api-integration:
+		cd conduit-api && go test -v ./app/api -run "Concurrent|Member|Stripe|Webhook|Payment|Closed|Billing|Multiple|Zero" -timeout 30s
 
 db-reset:
 	docker compose down -v
@@ -67,3 +75,11 @@ sqlc-generate:
 
 docs-api:
 	cd conduit-api && go run ./cmd/apidocs
+
+ngrok-backend:
+	@set -euo pipefail; \
+	command -v $(NGROK_BIN) >/dev/null 2>&1 || { echo "ngrok is not installed or not on PATH"; exit 1; }; \
+	nohup $(NGROK_BIN) http $(BACKEND_PORT) --url https://$(NGROK_DOMAIN) >/tmp/conduit-ngrok.log 2>&1 & \
+	echo "Opening ngrok tunnel to http://localhost:$(BACKEND_PORT)"; \
+	echo "Webhook URL: https://$(NGROK_DOMAIN)/api/webhooks/stripe"; \
+	echo "Inspect traffic at http://127.0.0.1:4040"

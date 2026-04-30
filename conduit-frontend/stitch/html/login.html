@@ -1,0 +1,219 @@
+<!doctype html>
+
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Sign In - Conduit</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&amp;family=Manrope:wght@200..800&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "outline-variant": "#c6c5d1",
+              tertiary: "#250a00",
+              "tertiary-container": "#461900",
+              "inverse-surface": "#2f312e",
+              "surface-container-lowest": "#ffffff",
+              "on-secondary": "#ffffff",
+              "on-tertiary-fixed": "#341100",
+              "on-background": "#1a1c19",
+              "on-primary": "#ffffff",
+              "primary-fixed": "#dde1ff",
+              outline: "#767681",
+              secondary: "#4b5c90",
+              "on-primary-fixed-variant": "#35437b",
+              "on-surface": "#1a1c19",
+              "on-primary-fixed": "#03164e",
+              "surface-container": "#eeeee9",
+              "on-secondary-fixed": "#021749",
+              "inverse-on-surface": "#f1f1ec",
+              background: "#fafaf5",
+              surface: "#fafaf5",
+              "on-error": "#ffffff",
+              "surface-variant": "#e3e3de",
+              "surface-bright": "#fafaf5",
+              "secondary-fixed-dim": "#b4c5ff",
+              "on-tertiary-container": "#c37d59",
+              "primary-fixed-dim": "#b7c4ff",
+              "on-tertiary-fixed-variant": "#6e3819",
+              "on-primary-container": "#7d8bc8",
+              "error-container": "#ffdad6",
+              "tertiary-fixed-dim": "#ffb692",
+              "tertiary-fixed": "#ffdbcb",
+              "surface-container-highest": "#e3e3de",
+              "surface-container-high": "#e8e8e3",
+              "on-error-container": "#93000a",
+              "secondary-container": "#b1c2fd",
+              error: "#ba1a1a",
+              "surface-tint": "#4d5b95",
+              "on-surface-variant": "#454650",
+              "on-secondary-fixed-variant": "#334477",
+              "on-tertiary": "#ffffff",
+              primary: "#000d3c",
+              "surface-dim": "#dadad5",
+              "secondary-fixed": "#dbe1ff",
+              "on-secondary-container": "#3d4e82",
+              "primary-container": "#122259",
+              "inverse-primary": "#b7c4ff",
+            },
+            borderRadius: {
+              DEFAULT: "1rem",
+              lg: "2.5rem",
+              xl: "4rem",
+              full: "9999px",
+            },
+            fontFamily: {
+              headline: ["Newsreader", "serif"],
+              display: ["Newsreader", "serif"],
+              body: ["Manrope", "sans-serif"],
+              label: ["Manrope", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: "Manrope", sans-serif;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        background-blend-mode: overlay;
+      }
+      .serif-text {
+        font-family: "Newsreader", serif;
+      }
+      .grain-overlay {
+        pointer-events: none;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        opacity: 0.03;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-background min-h-screen flex flex-col relative overflow-hidden"
+  >
+    <div class="grain-overlay fixed inset-0 z-0"></div>
+    <header
+      class="w-full px-12 py-8 flex justify-between items-center z-10 relative"
+    >
+      <a class="text-3xl font-serif italic text-primary" href="/">Conduit</a>
+      <div class="flex items-center gap-8">
+        <span
+          class="text-xs font-label uppercase tracking-widest text-primary/60"
+          >New to conduit?</span
+        >
+        <button
+          class="px-8 py-3 rounded-full border border-primary/20 hover:bg-primary/5 transition-all text-primary font-medium text-sm"
+        >
+          Create Account
+        </button>
+      </div>
+    </header>
+    <main class="flex-grow flex items-center justify-center px-6 relative z-10">
+      <div class="w-full max-w-[1440px] flex justify-center">
+        <!-- Centered Desktop Login Card -->
+        <div
+          class="w-full max-w-[520px] bg-surface-container-low/40 backdrop-blur-2xl rounded-lg p-16 relative shadow-2xl shadow-primary/5 border border-outline-variant/10"
+        >
+          <div class="text-center mb-12">
+            <h1
+              class="text-5xl md:text-6xl font-serif italic text-primary leading-tight tracking-tight"
+            >
+              Welcome to Conduit
+            </h1>
+          </div>
+          <form class="space-y-8">
+            <!-- Username Input -->
+            <div class="space-y-2 group/input">
+              <label
+                class="block text-[11px] font-label uppercase tracking-[0.2em] text-on-surface-variant/70 px-1"
+                for="username"
+                >Username or Email</label
+              >
+              <div class="relative">
+                <input
+                  class="w-full bg-surface-container-low border-0 rounded-md px-5 py-4.5 font-body focus:ring-1 focus:ring-primary/20 focus:bg-surface-container-highest transition-all outline-none text-primary placeholder:text-on-surface-variant/30 text-base"
+                  id="username"
+                  placeholder="curator@conduit.app"
+                  type="text"
+                />
+                <span
+                  class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-primary/10 group-focus-within/input:text-primary transition-colors text-2xl"
+                  >person</span
+                >
+              </div>
+            </div>
+            <!-- Password Input -->
+            <div class="space-y-2 group/input">
+              <div class="flex justify-between items-end px-1">
+                <label
+                  class="text-[11px] font-label uppercase tracking-[0.2em] text-on-surface-variant/70"
+                  for="password"
+                  >Password</label
+                >
+                <a
+                  class="text-[11px] font-label uppercase tracking-widest text-primary/50 hover:text-primary transition-colors"
+                  href="#"
+                  >Forgot password?</a
+                >
+              </div>
+              <div class="relative">
+                <input
+                  class="w-full bg-surface-container-low border-0 rounded-md px-5 py-4.5 font-body focus:ring-1 focus:ring-primary/20 focus:bg-surface-container-highest transition-all outline-none text-primary placeholder:text-on-surface-variant/30 text-base"
+                  id="password"
+                  placeholder="••••••••"
+                  type="password"
+                />
+                <span
+                  class="material-symbols-outlined absolute right-5 top-1/2 -translate-y-1/2 text-primary/10 group-focus-within/input:text-primary transition-colors text-2xl"
+                  >lock</span
+                >
+              </div>
+            </div>
+            <!-- Sign In Button -->
+            <div class="pt-4">
+              <button
+                class="w-full bg-primary text-on-primary rounded-xl py-5 font-label font-bold text-sm uppercase tracking-[0.25em] hover:shadow-xl hover:shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer"
+                type="submit"
+              >
+                Sign In
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+    <footer
+      class="w-full px-12 py-10 flex flex-col md:flex-row justify-between items-center gap-6 relative z-10"
+    >
+      <div
+        class="flex items-center gap-10 text-[11px] font-label uppercase tracking-[0.2em] text-on-surface-variant/40"
+      >
+        <a class="hover:text-primary transition-colors" href="#"
+          >Privacy Policy</a
+        >
+        <a class="hover:text-primary transition-colors" href="#"
+          >Security Standards</a
+        >
+        <a class="hover:text-primary transition-colors" href="#"
+          >Contact Support</a
+        >
+      </div>
+      <p
+        class="text-[11px] font-label uppercase tracking-[0.2em] text-on-surface-variant/30"
+      >
+        © 2026 CONDUIT. Built for CONVENIENCE.
+      </p>
+    </footer>
+  </body>
+</html>

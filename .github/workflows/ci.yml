@@ -6,6 +6,9 @@ on:
       - main
       - master
   pull_request:
+    branches:
+      - main
+      - development
 
 jobs:
   backend:
@@ -30,6 +33,10 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Concurrency And Idempotency Tests (Race Detector)
+        run: |
+          go test -race ./app/api -run "TestConcurrentCreatePaymentNearTransactionCap|TestConcurrentAddMembershipNearMemberLimit|TestStripeWebhookDuplicateEventsOnlyOneTransitionPath|TestCreatePaymentReturnsCapacityErrorShape|TestAddMembershipReturnsMemberLimitErrorShape"
 
       - name: Build
         run: go build ./...

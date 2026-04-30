@@ -15,6 +15,13 @@ Payments are handled either:
 
 The backend is the **single source of truth for all state**.
 
+Organizations follow a **tiered subscription model** where higher tiers can process more transactions per billing period. The **free tier** supports smaller organizations with a limited member cap and applies a small per-transaction fee.
+
+Implementation notes:
+
+* API/enforcement: `context/subscription_api_notes.md`
+* Database/migrations: `context/subscription_db_notes.md`
+
 ---
 
 # 2. High-Level Components
@@ -127,6 +134,23 @@ CashPayment
 
 ---
 
+## 3.1 Subscription & Billing Model (Organization-Level)
+
+In the current MVP model, an organization maps to a group for policy enforcement.
+
+* Each organization has a subscription tier.
+* Higher tiers allow more transactions per billing period.
+* Free tier has a lower member limit.
+* Free tier applies a small transaction fee.
+
+### Enforcement Rules
+
+1. Member invites are blocked when the tier member limit is reached.
+2. New payments are blocked when transaction capacity for the current period is exhausted.
+3. Free-tier payment creation includes the small transaction fee.
+
+---
+
 # 4. Key System Flows
 
 ---
@@ -176,6 +200,16 @@ CashPayment
 2. Backend verifies collector role
 3. Backend marks payment as PAID
 4. CashPayment marked confirmed
+
+---
+
+## 4.5 Subscription Gatekeeping Flow
+
+1. User initiates member invite or payment
+2. Backend resolves organization tier
+3. Backend validates member and transaction limits
+4. If free tier and payment is allowed, backend applies the small transaction fee
+5. Request proceeds or fails with a subscription limit error
 
 ---
 
@@ -239,11 +273,12 @@ pending → failed
 * Stripe is sole online payment system
 * Cash is manually confirmed (trusted actor system)
 * No background processing system in MVP
+* Subscription limits (member cap and transaction capacity) must be enforced before write operations
 
 ---
 
 # 9. Architecture Summary
 
-> The system is a minimal client–server application where a Next.js PWA frontend interacts with a Gin backend to manage groups, collections, and payments. Online payments are processed through Stripe with webhook-based confirmation, while cash payments are manually confirmed through QR scanning by authorized collectors. PostgreSQL acts as the single source of truth, and the system avoids asynchronous infrastructure to maintain simplicity for the MVP stage.
+> The system is a minimal client–server application where a Next.js PWA frontend interacts with a Gin backend to manage groups, collections, and payments. Online payments are processed through Stripe with webhook-based confirmation, while cash payments are manually confirmed through QR scanning by authorized collectors. PostgreSQL acts as the single source of truth, and the system avoids asynchronous infrastructure to maintain simplicity for the MVP stage. It also enforces a tiered organization subscription model where transaction capacity scales by tier, while free-tier organizations have limited members and a small transaction fee.
 
 ---

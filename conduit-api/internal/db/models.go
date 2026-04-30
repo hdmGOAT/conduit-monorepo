@@ -143,12 +143,56 @@ func (ns NullFormFieldType) Value() (driver.Value, error) {
 	return string(ns.FormFieldType), nil
 }
 
+type JoinRequestStatus string
+
+const (
+	JoinRequestStatusPending  JoinRequestStatus = "pending"
+	JoinRequestStatusApproved JoinRequestStatus = "approved"
+	JoinRequestStatusDenied   JoinRequestStatus = "denied"
+)
+
+func (e *JoinRequestStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = JoinRequestStatus(s)
+	case string:
+		*e = JoinRequestStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for JoinRequestStatus: %T", src)
+	}
+	return nil
+}
+
+type NullJoinRequestStatus struct {
+	JoinRequestStatus JoinRequestStatus `json:"join_request_status"`
+	Valid             bool              `json:"valid"` // Valid is true if JoinRequestStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullJoinRequestStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.JoinRequestStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.JoinRequestStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullJoinRequestStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.JoinRequestStatus), nil
+}
+
 type MembershipRole string
 
 const (
 	MembershipRoleAdmin     MembershipRole = "admin"
 	MembershipRoleMember    MembershipRole = "member"
 	MembershipRoleCollector MembershipRole = "collector"
+	MembershipRoleModerator MembershipRole = "moderator"
 )
 
 func (e *MembershipRole) Scan(src interface{}) error {
@@ -313,6 +357,50 @@ func (ns NullPaymentStatus) Value() (driver.Value, error) {
 	return string(ns.PaymentStatus), nil
 }
 
+type SubscriptionTier string
+
+const (
+	SubscriptionTierFree       SubscriptionTier = "free"
+	SubscriptionTierStarter    SubscriptionTier = "starter"
+	SubscriptionTierGrowth     SubscriptionTier = "growth"
+	SubscriptionTierEnterprise SubscriptionTier = "enterprise"
+)
+
+func (e *SubscriptionTier) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SubscriptionTier(s)
+	case string:
+		*e = SubscriptionTier(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SubscriptionTier: %T", src)
+	}
+	return nil
+}
+
+type NullSubscriptionTier struct {
+	SubscriptionTier SubscriptionTier `json:"subscription_tier"`
+	Valid            bool             `json:"valid"` // Valid is true if SubscriptionTier is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSubscriptionTier) Scan(value interface{}) error {
+	if value == nil {
+		ns.SubscriptionTier, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SubscriptionTier.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSubscriptionTier) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SubscriptionTier), nil
+}
+
 type CashPayment struct {
 	ID          int64              `json:"id"`
 	PaymentID   int64              `json:"payment_id"`
@@ -375,6 +463,15 @@ type Group struct {
 	ID        int64              `json:"id"`
 	OwnerID   int64              `json:"owner_id"`
 	Name      string             `json:"name"`
+	IsOpen    bool               `json:"is_open"`
+	JoinCode  string             `json:"join_code"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type JoinRequest struct {
+	UserID    int64              `json:"user_id"`
+	GroupID   int64              `json:"group_id"`
+	Status    JoinRequestStatus  `json:"status"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -383,6 +480,17 @@ type Membership struct {
 	GroupID   int64              `json:"group_id"`
 	Role      MembershipRole     `json:"role"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type OrganizationSubscription struct {
+	ID                           int64              `json:"id"`
+	GroupID                      int64              `json:"group_id"`
+	Tier                         SubscriptionTier   `json:"tier"`
+	MemberLimit                  int32              `json:"member_limit"`
+	TransactionCapacityPerPeriod int32              `json:"transaction_capacity_per_period"`
+	TransactionFeeBps            int32              `json:"transaction_fee_bps"`
+	CreatedAt                    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OutboxEvent struct {
@@ -396,11 +504,22 @@ type OutboxEvent struct {
 	ProcessedAt pgtype.Timestamptz `json:"processed_at"`
 }
 
+type PasswordResetToken struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type Payment struct {
 	ID                    int64              `json:"id"`
 	UserID                int64              `json:"user_id"`
 	CollectionID          int64              `json:"collection_id"`
-	Amount                int64              `json:"amount"`
+	BaseAmount            int64              `json:"base_amount"`
+	FeeAmount             int64              `json:"fee_amount"`
+	TotalAmount           int64              `json:"total_amount"`
 	Status                PaymentStatus      `json:"status"`
 	Method                PaymentMethod      `json:"method"`
 	StripePaymentIntentID pgtype.Text        `json:"stripe_payment_intent_id"`
@@ -414,6 +533,18 @@ type RefreshToken struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type SubscriptionUsagePeriod struct {
+	ID               int64              `json:"id"`
+	GroupID          int64              `json:"group_id"`
+	PeriodStart      pgtype.Timestamptz `json:"period_start"`
+	PeriodEnd        pgtype.Timestamptz `json:"period_end"`
+	TransactionCount int32              `json:"transaction_count"`
+	GrossAmount      int64              `json:"gross_amount"`
+	FeeAmount        int64              `json:"fee_amount"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {

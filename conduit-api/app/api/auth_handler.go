@@ -24,6 +24,8 @@ type AuthService interface {
 	Login(ctx context.Context, email, password string) (auth.Session, error)
 	Refresh(ctx context.Context, refreshToken string) (auth.Session, error)
 	Logout(ctx context.Context, refreshToken string) error
+	RequestPasswordReset(ctx context.Context, email string) error
+	ResetPassword(ctx context.Context, token, newPassword string) error
 	GetUser(ctx context.Context, userID int64) (db.User, error)
 	ParseAccessToken(accessToken string) (int64, error)
 }
@@ -37,6 +39,15 @@ type registerRequest struct {
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
+}
+
+type forgotPasswordRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type resetPasswordRequest struct {
+	Token       string `json:"token" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required,min=8"`
 }
 
 func NewAuthHandler(authService AuthService, cookieSecure bool, refreshTTLSeconds int) *AuthHandler {
@@ -122,6 +133,41 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	_ = h.authService.Logout(c.Request.Context(), refreshToken)
 	c.SetCookie("refresh_token", "", -1, "/", "", h.cookieSecure, true)
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
+}
+
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req forgotPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	if err := h.authService.RequestPasswordReset(c.Request.Context(), req.Email); err != nil {
+		_ = c.Error(err)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "if an account exists, a reset link has been sent"})
+}
+
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req resetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	err := h.authService.ResetPassword(c.Request.Context(), req.Token, req.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, auth.ErrInvalidPasswordResetToken):
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired reset token"})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to reset password"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "password reset successful"})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {

@@ -2,22 +2,29 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
+	"net/url"
 	"strings"
 	"time"
 
 	"conduit-monorepo/conduit-api/internal/db"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrEmailAlreadyExists  = errors.New("email already exists")
-	ErrInvalidRefreshToken = errors.New("invalid refresh token")
-	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidCredentials        = errors.New("invalid credentials")
+	ErrEmailAlreadyExists        = errors.New("email already exists")
+	ErrInvalidRefreshToken       = errors.New("invalid refresh token")
+	ErrUserNotFound              = errors.New("user not found")
+	ErrInvalidPasswordResetToken = errors.New("invalid password reset token")
 )
 
 type Session struct {
@@ -27,13 +34,37 @@ type Session struct {
 	ExpiresIn    int
 }
 
-type Service struct {
-	queries *db.Queries
-	tokens  *TokenManager
+type PasswordResetEmailSender interface {
+	SendPasswordResetEmail(ctx context.Context, to, displayName, resetLink string) error
 }
 
-func NewService(queries *db.Queries, tokens *TokenManager) *Service {
-	return &Service{queries: queries, tokens: tokens}
+type Service struct {
+	queries          *db.Queries
+	tokens           *TokenManager
+	resetSender      PasswordResetEmailSender
+	frontendURL      string
+	passwordResetTTL time.Duration
+}
+
+func NewService(
+	queries *db.Queries,
+	tokens *TokenManager,
+	resetSender PasswordResetEmailSender,
+	frontendURL string,
+	passwordResetTTL time.Duration,
+) *Service {
+	if passwordResetTTL <= 0 {
+		passwordResetTTL = 30 * time.Minute
+	}
+
+	trimmedFrontendURL := strings.TrimRight(strings.TrimSpace(frontendURL), "/")
+	return &Service{
+		queries:          queries,
+		tokens:           tokens,
+		resetSender:      resetSender,
+		frontendURL:      trimmedFrontendURL,
+		passwordResetTTL: passwordResetTTL,
+	}
 }
 
 func (s *Service) Register(ctx context.Context, email, password, displayName string) (Session, error) {
@@ -112,6 +143,82 @@ func (s *Service) Logout(ctx context.Context, refreshToken string) error {
 	return s.queries.RevokeRefreshToken(ctx, tokenID)
 }
 
+func (s *Service) RequestPasswordReset(ctx context.Context, email string) error {
+	user, err := s.queries.GetUserCredentialByEmail(ctx, normalizeEmail(email))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	if s.resetSender == nil || s.frontendURL == "" {
+		return errors.New("password reset is not configured")
+	}
+
+	if err := s.queries.MarkPasswordResetTokensUsedForUser(ctx, user.ID); err != nil {
+		return err
+	}
+
+	rawToken, err := generatePasswordResetToken()
+	if err != nil {
+		return err
+	}
+
+	_, err = s.queries.CreatePasswordResetToken(ctx, db.CreatePasswordResetTokenParams{
+		UserID:    user.ID,
+		TokenHash: hashPasswordResetToken(rawToken),
+		ExpiresAt: pgtype.Timestamptz{
+			Time:  time.Now().Add(s.passwordResetTTL),
+			Valid: true,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	resetLink := s.frontendURL + "/reset-password?token=" + url.QueryEscape(rawToken)
+	return s.resetSender.SendPasswordResetEmail(ctx, user.Email, user.DisplayName, resetLink)
+}
+
+func (s *Service) ResetPassword(ctx context.Context, token, newPassword string) error {
+	trimmedToken := strings.TrimSpace(token)
+	if trimmedToken == "" {
+		return ErrInvalidPasswordResetToken
+	}
+
+	userID, err := s.queries.ConsumePasswordResetToken(ctx, hashPasswordResetToken(trimmedToken))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrInvalidPasswordResetToken
+		}
+		return err
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	err = s.queries.UpdateUserPasswordHash(ctx, db.UpdateUserPasswordHashParams{
+		ID:           userID,
+		PasswordHash: string(hash),
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := s.queries.RevokeRefreshTokensForUser(ctx, userID); err != nil {
+		return err
+	}
+
+	if err := s.queries.MarkPasswordResetTokensUsedForUser(ctx, userID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *Service) ParseAccessToken(accessToken string) (int64, error) {
 	return s.tokens.ParseAccessToken(accessToken)
 }
@@ -165,4 +272,17 @@ func isUniqueViolation(err error) bool {
 		return pgErr.Code == "23505"
 	}
 	return false
+}
+
+func generatePasswordResetToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func hashPasswordResetToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }

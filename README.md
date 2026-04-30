@@ -6,6 +6,28 @@ Monorepo containing:
 
 ## Run in development
 
+Environment variables are loaded from `.env` for local development. See `.env.example` for the committed template.
+
+Add these values:
+
+```text
+PORT=8080
+DATABASE_URL=postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable
+JWT_SECRET=dev-change-me
+ACCESS_TOKEN_TTL_MINUTES=15
+REFRESH_TOKEN_TTL_HOURS=168
+PASSWORD_RESET_TTL_MINUTES=30
+COOKIE_SECURE=false
+FRONTEND_URL=http://localhost:3000
+RESEND_FROM_EMAIL=Conduit <onboarding@resend.dev>
+RESEND_API_KEY=<your_resend_api_key>
+API_BASE_URL=http://localhost:8080
+SUBSCRIPTION_DEFAULT_TIER=free
+SUBSCRIPTION_DEFAULT_MEMBER_LIMIT=25
+SUBSCRIPTION_DEFAULT_TRANSACTION_CAPACITY_PER_PERIOD=250
+SUBSCRIPTION_DEFAULT_TRANSACTION_FEE_BPS=50
+```
+
 Run both apps together:
 
 ```bash
@@ -18,6 +40,16 @@ Run individually:
 make dev-api
 make dev-frontend
 ```
+
+## Environment example
+
+Copy the template and fill in your local values:
+
+```bash
+cp .env.example .env
+```
+
+The template includes backend, frontend, and Stripe values used by local development.
 
 ## Quality checks
 
