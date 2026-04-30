@@ -10,6 +10,8 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@stripe/react-stripe-js": "^6.3.0",
+    "@stripe/stripe-js": "^9.3.1",
     "axios": "1.14.0",
     "next": "16.2.3",
     "react": "19.2.4",

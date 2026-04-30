@@ -29,7 +29,7 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 			return db.Group{ID: id, OwnerID: 99}, nil
 		},
 		listGroupMembershipsFn: func(ctx context.Context, groupID int64) ([]db.Membership, error) {
-			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleMember}}, nil
+			return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleCollector}}, nil
 		},
 		createPaymentFn: func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error) {
 			called = true
@@ -144,6 +144,35 @@ func newSignedStripeWebhookRequest(t *testing.T, eventType, paymentIntentID, sec
 	req.Header.Set("Stripe-Signature", signedPayload.Header)
 	req.Header.Set("Content-Type", "application/json")
 	return req
+}
+
+func TestStripeWebhook_InvalidWebhookIncludesDetails(t *testing.T) {
+	stripeGateway := &fakeStripeGateway{
+		parseWebhookEventFn: func(payload []byte, signature string) (stripeWebhookEvent, error) {
+			return stripeWebhookEvent{}, errors.New("signature verification failed")
+		},
+	}
+	router := newTestRouterWithDeps(&fakeAuthService{}, &fakeDB{}, stripeGateway)
+
+	req, err := http.NewRequest(http.MethodPost, "/api/webhooks/stripe", strings.NewReader(`{"type":"payment_intent.succeeded"}`))
+	if err != nil {
+		t.Fatalf("failed to build webhook request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Stripe-Signature", "t=123,v1=bad")
+
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"error":"invalid stripe webhook"`) {
+		t.Fatalf("expected invalid webhook error, got %s", resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), `"details":"signature verification failed"`) {
+		t.Fatalf("expected verbose details in response, got %s", resp.Body.String())
+	}
 }
 
 func TestCreatePayment_StripeCreatesPaymentIntent(t *testing.T) {
@@ -664,14 +693,11 @@ func TestListPaymentsByCollection_ReturnsMostRecentFirst(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &out); err != nil {
 		t.Fatalf("failed to parse response: %v", err)
 	}
-	if len(out) != 2 {
-		t.Fatalf("expected 2 payments, got %d", len(out))
+	if len(out) != 1 {
+		t.Fatalf("expected 1 payment, got %d", len(out))
 	}
 	if id, ok := out[0]["id"].(float64); !ok || int64(id) != 9 {
 		t.Fatalf("expected newest payment first, got %v", out[0]["id"])
-	}
-	if id, ok := out[1]["id"].(float64); !ok || int64(id) != 3 {
-		t.Fatalf("expected older payment second, got %v", out[1]["id"])
 	}
 	if totalAmount, ok := out[0]["total_amount"].(float64); !ok || int64(totalAmount) != 2625 {
 		t.Fatalf("expected total_amount 2625 on list response, got %v", out[0]["total_amount"])

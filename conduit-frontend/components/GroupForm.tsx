@@ -92,7 +92,6 @@ export default function GroupForm({
         onSuccess?.(updated);
         window.location.href = `/groups/${updated.id ?? groupId}`;
       } else {
-        // create with name and is_open
         const body = {
           name: name.trim(),
           is_open: privacy === "public",
@@ -122,40 +121,34 @@ export default function GroupForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="space-y-2">
-        <label className="block text-sm font-semibold text-[#122038]">
-          Group name
+    <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="space-y-3">
+        <label className="text-sm font-bold uppercase tracking-widest text-ink/30 ml-1">
+          Group Identity
         </label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="block w-full rounded-2xl border border-[#122038]/12 bg-white px-4 py-3 text-[#122038] shadow-sm outline-none transition placeholder:text-[#122038]/35 focus:border-[#122038]/30 focus:ring-2 focus:ring-[#122038]/10"
-          placeholder="Weekend Book Club"
-          required
-          minLength={3}
-        />
-        <p className="text-sm text-[#122038]/60">
-          A short, legible name makes the group easier to find later.
+        <div className="relative">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="block w-full rounded-2xl border border-ink/10 bg-white/50 px-5 py-4 text-lg font-bold text-ink outline-none transition focus:border-ink/20 focus:ring-4 focus:ring-ink/5 placeholder:text-ink/20"
+            placeholder="e.g. Weekend Book Club"
+            required
+            minLength={3}
+          />
+        </div>
+        <p className="px-1 text-xs font-medium text-ink/40">
+          A clear, memorable name helps members identify your space quickly.
         </p>
-        {fieldErrors.name ? (
-          <p className="text-sm font-medium text-rose-600">
-            {fieldErrors.name}
-          </p>
-        ) : null}
+        {fieldErrors.name && (
+          <p className="px-1 text-xs font-bold text-ember">{fieldErrors.name}</p>
+        )}
       </div>
 
-      <div className="space-y-3">
-        <div>
-          <label className="block text-sm font-semibold text-[#122038]">
-            Privacy
-          </label>
-          <p className="mt-1 text-sm text-[#122038]/60">
-            This controls whether access is instant or review-based.
-          </p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
+      <div className="space-y-4">
+        <label className="text-sm font-bold uppercase tracking-widest text-ink/30 ml-1">
+          Privacy Mode
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
           {privacyOptions.map((option) => {
             const selected = privacy === option.value;
 
@@ -164,72 +157,62 @@ export default function GroupForm({
                 key={option.value}
                 type="button"
                 onClick={() => setPrivacy(option.value)}
-                className={`rounded-2xl border px-4 py-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#122038]/20 ${
+                className={`group relative flex flex-col rounded-3xl border p-6 text-left transition-all ${
                   selected
-                    ? "border-[#122038] bg-[#122038] text-[#f8f7f2] shadow-[0_12px_28px_rgba(18,32,56,0.18)]"
-                    : "border-[#122038]/12 bg-white text-[#122038] hover:border-[#122038]/30 hover:bg-[#f8f7f2]"
+                    ? "border-ink bg-ink text-cloud shadow-glow"
+                    : "border-ink/10 bg-white/50 text-ink hover:border-ink/20 hover:bg-white"
                 }`}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold uppercase tracking-[0.14em]">
-                      {option.title}
-                    </div>
-                    <div
-                      className={`mt-2 text-sm leading-6 ${selected ? "text-[#f8f7f2]/80" : "text-[#122038]/65"}`}
-                    >
-                      {option.description}
-                    </div>
-                  </div>
-                  <span
-                    className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full border ${
-                      selected
-                        ? "border-[#f8f7f2] bg-[#f8f7f2]"
-                        : "border-[#122038]/20 bg-white"
-                    }`}
-                    aria-hidden="true"
-                  >
-                    {selected ? (
-                      <span className="h-2.5 w-2.5 rounded-full bg-[#122038]" />
-                    ) : null}
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${selected ? "text-forest" : "text-ink/30"}`}>
+                    {option.title}
                   </span>
+                  <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                    selected ? "border-forest bg-forest" : "border-ink/10"
+                  }`}>
+                    {selected && <div className="h-1.5 w-1.5 rounded-full bg-ink"></div>}
+                  </div>
                 </div>
+                <p className={`mt-3 font-bold ${selected ? "text-white" : "text-ink"}`}>
+                  {option.value === 'public' ? 'Open Access' : 'Private Space'}
+                </p>
+                <p className={`mt-1 text-xs leading-relaxed ${selected ? "text-cloud/50" : "text-ink/40"}`}>
+                  {option.description}
+                </p>
               </button>
             );
           })}
         </div>
-        {fieldErrors.privacy ? (
-          <p className="text-sm font-medium text-rose-600">
-            {fieldErrors.privacy}
-          </p>
-        ) : null}
+        {fieldErrors.privacy && (
+          <p className="px-1 text-xs font-bold text-ember">{fieldErrors.privacy}</p>
+        )}
       </div>
 
-      {error ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+      {error && (
+        <div className="rounded-2xl border border-rose-100 bg-rose-50/50 p-4 text-sm font-medium text-rose-800 backdrop-blur-sm">
           {error}
         </div>
-      ) : null}
+      )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex-1">
+          <p className="text-xs font-medium leading-relaxed text-ink/40 italic max-w-sm">
+            {mode === "edit"
+              ? "Updating your group's profile will reflect instantly for all current members and pending requests."
+              : "You can change these settings later as your community grows and evolves."}
+          </p>
+        </div>
         <Button
           type="submit"
           disabled={submitting}
-          className="w-full sm:w-auto"
+          className="min-w-[200px]"
+          variant="primary"
+          size="md"
         >
           {submitting
-            ? mode === "edit"
-              ? "Saving…"
-              : "Creating…"
-            : mode === "edit"
-              ? "Save changes"
-              : "Create group"}
+            ? (mode === "edit" ? "Saving..." : "Creating...")
+            : (mode === "edit" ? "Save Changes" : "Launch Group")}
         </Button>
-        <p className="text-sm text-[#122038]/60">
-          {mode === "edit"
-            ? "Changes update the group name first, then its access mode."
-            : "You can adjust privacy later if the group grows."}
-        </p>
       </div>
     </form>
   );

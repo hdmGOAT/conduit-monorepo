@@ -28,6 +28,17 @@ FROM collection_form_fields
 WHERE form_id = $1
 ORDER BY sort_order;
 
+-- name: UpdateCollectionFormField :one
+UPDATE collection_form_fields
+SET field_key = $2, label = $3, field_type = $4::form_field_type, placeholder = $5, is_required = $6, options = $7, sort_order = $8
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteCollectionFormField :one
+DELETE FROM collection_form_fields
+WHERE id = $1
+RETURNING *;
+
 -- name: GetCollectionFormByID :one
 SELECT *
 FROM collection_forms

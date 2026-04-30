@@ -120,6 +120,18 @@ func (h *CollectionsHandler) ListCollections(c *gin.Context) {
 		return
 	}
 
+	// try to detect current user (optional)
+	var callerID int64
+	userVal, hasUser := c.Get(middleware.UserIDContextKey)
+	if hasUser {
+		if id, ok := userVal.(int64); ok {
+			callerID = id
+		} else {
+			// if context contains invalid user id, treat as unauthenticated
+			hasUser = false
+		}
+	}
+
 	out := make([]gin.H, 0, len(cols))
 	for _, coll := range cols {
 		item := gin.H{"id": coll.ID, "group_id": coll.GroupID, "amount": coll.Amount, "status": coll.Status}
@@ -131,6 +143,22 @@ func (h *CollectionsHandler) ListCollections(c *gin.Context) {
 		if coll.CreatedAt.Valid {
 			item["created_at"] = coll.CreatedAt.Time.UTC().Format(time.RFC3339)
 		}
+
+		// include whether current user has a paid payment for this collection
+		paid := false
+		if hasUser {
+			payments, err := h.db.ListPaymentsByCollection(c.Request.Context(), coll.ID)
+			if err == nil {
+				for _, p := range payments {
+					if p.UserID == callerID && p.Status == db.PaymentStatusPaid {
+						paid = true
+						break
+					}
+				}
+			}
+		}
+		item["paid_by_current_user"] = paid
+
 		out = append(out, item)
 	}
 

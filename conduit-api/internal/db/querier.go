@@ -30,6 +30,7 @@ type Querier interface {
 	CreateUserCredential(ctx context.Context, arg CreateUserCredentialParams) (User, error)
 	DeleteCollection(ctx context.Context, arg DeleteCollectionParams) (Collection, error)
 	DeleteCollectionForm(ctx context.Context, id int64) (CollectionForm, error)
+	DeleteCollectionFormField(ctx context.Context, id int64) (CollectionFormField, error)
 	DeleteFormAnswer(ctx context.Context, id int64) (CollectionFormAnswer, error)
 	DeleteFormSubmission(ctx context.Context, id int64) (CollectionFormSubmission, error)
 	DeleteGroup(ctx context.Context, id int64) (Group, error)
@@ -70,6 +71,7 @@ type Querier interface {
 	RevokeRefreshTokensForUser(ctx context.Context, userID int64) error
 	UpdateCollection(ctx context.Context, arg UpdateCollectionParams) (Collection, error)
 	UpdateCollectionForm(ctx context.Context, arg UpdateCollectionFormParams) (CollectionForm, error)
+	UpdateCollectionFormField(ctx context.Context, arg UpdateCollectionFormFieldParams) (CollectionFormField, error)
 	UpdateFormAnswer(ctx context.Context, arg UpdateFormAnswerParams) (CollectionFormAnswer, error)
 	UpdateFormSubmission(ctx context.Context, arg UpdateFormSubmissionParams) (CollectionFormSubmission, error)
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (Group, error)

@@ -1,603 +1,436 @@
-"use client";
+"use client"
 
-import Link from "next/link";
-import React, { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
-import { Fraunces, Space_Grotesk } from "next/font/google";
-import appAPIClient from "@/lib/api/httpClient";
-import ConfirmModal from "@/components/ConfirmModal";
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const space = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
+import React, { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
+import appAPIClient from '@/lib/api/httpClient'
+import { Button } from '@/components/button'
 
 interface Group {
-  id: string;
-  name: string;
-  role?: string;
-  owner_id: string;
-  join_code?: string;
-  has_pending_request?: boolean;
+  id: string
+  name: string
+  role?: string
+  owner_id: string
+  join_code?: string
+  has_pending_request?: boolean
 }
 
 interface Membership {
-  user_id: string;
-  group_id: string;
-  role: string;
-  display_name?: string;
-  email?: string;
+  user_id: string
+  group_id: string
+  role: string
+  display_name?: string
+  email?: string
 }
 
 interface JoinRequest {
-  user_id: string;
-  group_id: string;
-  status: string;
-  display_name?: string;
-  email?: string;
+  user_id: string
+  group_id: string
+  status: string
+  display_name?: string
+  email?: string
+}
+
+interface Collection {
+  id: string
+  group_id: string
+  amount: number
+  status: string
+  deadline: string
+  paid_by_current_user?: boolean
+  has_submission_by_current_user?: boolean
+}
+
+function formatCurrency(amountInCents: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amountInCents / 100)
+}
+
+function formatDeadline(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
 
 export default function Page() {
-  const params = useParams() as { id: string };
-  const id = params.id;
-  const [group, setGroup] = useState<Group | null>(null);
-  const [memberships, setMemberships] = useState<Membership[]>([]);
-  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [memberToRemove, setMemberToRemove] = useState<Membership | null>(null);
-  const [removeSubmitting, setRemoveSubmitting] = useState(false);
-  const [removeError, setRemoveError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "members" | "requests"
-  >("overview");
-
-  const isMember = Boolean(group?.role);
-  const isAdmin = group?.role === "admin";
-  const memberDisplayName = memberToRemove
-    ? memberToRemove.display_name ||
-      memberToRemove.email ||
-      `User #${memberToRemove.user_id}`
-    : "";
+  const params = useParams() as { id: string }
+  const id = params.id
+  const [group, setGroup] = useState<Group | null>(null)
+  const [memberships, setMemberships] = useState<Membership[]>([])
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'overview' | 'collections' | 'members' | 'requests'>('overview')
 
   useEffect(() => {
-    let mounted = true;
-    appAPIClient
-      .get(`/groups/${id}`)
-      .then((res) => {
-        if (mounted) {
-          setGroup(res.data);
-          if (res.data.role) {
-            appAPIClient
-              .get(`/groups/${id}/memberships`)
-              .then((mRes) => {
-                if (mounted) setMemberships(mRes.data);
-              })
-              .catch(console.error);
-          }
-          if (res.data.role === "admin") {
-            appAPIClient
-              .get(`/groups/${id}/join-requests`)
-              .then((jrRes) => {
-                if (mounted)
-                  setJoinRequests(
-                    jrRes.data.filter(
-                      (jr: JoinRequest) => jr.status === "pending",
-                    ),
-                  );
-              })
-              .catch(console.error);
-          }
+    let mounted = true
+    appAPIClient.get(`/groups/${id}`).then(res => {
+      if (mounted) {
+        setGroup(res.data)
+        appAPIClient.get(`/groups/${id}/collections`).then((cRes) => {
+          if (!mounted) return
+          const groupCollections = Array.isArray(cRes.data) ? cRes.data : []
+          Promise.all(
+            groupCollections.map(async (collection: Collection) => {
+              const submissionRes = await appAPIClient
+                .get(`/collections/${collection.id}/submissions/me`)
+                .catch(() => ({ data: null }))
+
+              return {
+                ...collection,
+                has_submission_by_current_user: Boolean(submissionRes.data),
+              }
+            })
+          ).then((enrichedCollections) => {
+            if (mounted) setCollections(enrichedCollections)
+          }).catch(console.error)
+        }).catch(console.error)
+        if (res.data.role) {
+          appAPIClient.get(`/groups/${id}/memberships`).then(mRes => {
+            if (mounted) setMemberships(mRes.data)
+          }).catch(console.error)
         }
-      })
-      .catch((err) => {
-        if (mounted)
-          setError(
-            err?.response?.data?.error ||
-              err?.message ||
-              "Failed to load group",
-          );
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
-    return () => {
-      mounted = false;
-    };
-  }, [id]);
+        if (res.data.role === 'admin') {
+          appAPIClient.get(`/groups/${id}/join-requests`).then(jrRes => {
+            if (mounted) setJoinRequests(jrRes.data.filter((jr: JoinRequest) => jr.status === 'pending'))
+          }).catch(console.error)
+        }
+      }
+    }).catch(err => {
+      if (mounted) setError(err?.response?.data?.error || err?.message || 'Failed to load group')
+    }).finally(() => {
+      if (mounted) setLoading(false)
+    })
+    return () => { mounted = false }
+  }, [id])
 
   async function requestJoin() {
-    if (!group) return;
-    setSubmitting(true);
-    setError(null);
-    setMessage(null);
+    if (!group) return
+    setSubmitting(true)
+    setError(null)
+    setMessage(null)
 
     try {
-      const res = await appAPIClient.post(`/groups/${id}/join`, {});
-      const body = res.data ?? {};
-      if (body.message === "already a member") {
-        setMessage("You are already a member of this group.");
-      } else if (
-        body.status === "pending" ||
-        body.message === "join request already exists" ||
-        body.message === "join request created"
-      ) {
-        setMessage("Your join request was sent and is waiting for review.");
-        setGroup({ ...group, has_pending_request: true });
+      const res = await appAPIClient.post(`/groups/${id}/join`, {})
+      const body = res.data ?? {}
+      if (body.message === 'already a member') {
+        setMessage('You are already a member of this group.')
+      } else if (body.status === 'pending' || body.message === 'join request already exists' || body.message === 'join request created') {
+        setMessage('Your join request was sent and is waiting for review.')
+        setGroup({ ...group, has_pending_request: true })
       } else {
-        setMessage("You joined the group.");
-        setGroup({ ...group, role: body.role as string });
-        appAPIClient
-          .get(`/groups/${id}/memberships`)
-          .then((mRes) => setMemberships(mRes.data));
+        setMessage('You joined the group.')
+        setGroup({ ...group, role: body.role as string })
+        appAPIClient.get(`/groups/${id}/memberships`).then(mRes => setMemberships(mRes.data))
       }
     } catch (err: unknown) {
-      const apiError = err as {
-        response?: { data?: { error?: string } };
-        message?: string;
-      };
-      setError(
-        apiError?.response?.data?.error ||
-          apiError?.message ||
-          "Failed to request access",
-      );
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setError(apiError?.response?.data?.error || apiError?.message || 'Failed to request access')
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
   }
 
   async function leaveGroup() {
-    if (submitting) return;
-    if (!confirm("Are you sure you want to leave this group?")) return;
-    setSubmitting(true);
-    setError(null);
+    if (submitting) return
+    if (!confirm('Are you sure you want to leave this group?')) return
+    setSubmitting(true)
+    setError(null)
 
     try {
-      await appAPIClient.delete(`/groups/${id}/memberships/me`);
-      window.location.href = "/groups";
+      await appAPIClient.delete(`/groups/${id}/memberships/me`)
+      window.location.href = '/groups'
     } catch (err: unknown) {
-      const apiError = err as {
-        response?: { data?: { error?: string } };
-        message?: string;
-      };
-      setError(
-        apiError?.response?.data?.error ||
-          apiError?.message ||
-          "Failed to leave group",
-      );
-      setSubmitting(false);
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      setError(apiError?.response?.data?.error || apiError?.message || 'Failed to leave group')
+      setSubmitting(false)
     }
   }
 
-  function requestMemberRemoval(member: Membership) {
-    setRemoveError(null);
-    setMemberToRemove(member);
-  }
-
-  function cancelMemberRemoval() {
-    if (removeSubmitting) return;
-    setMemberToRemove(null);
-    setRemoveError(null);
-  }
-
-  async function confirmMemberRemoval() {
-    if (!memberToRemove) return;
-    setRemoveSubmitting(true);
-    setRemoveError(null);
-
+  async function ejectMember(userId: string) {
+    if (!confirm('Are you sure you want to remove this member?')) return
     try {
-      await appAPIClient.delete(
-        `/groups/${id}/memberships/${memberToRemove.user_id}`,
-      );
-      setMemberships((prev) =>
-        prev.filter((m) => m.user_id !== memberToRemove.user_id),
-      );
-      setMemberToRemove(null);
+      await appAPIClient.delete(`/groups/${id}/memberships/${userId}`)
+      setMemberships(memberships.filter(m => m.user_id !== userId))
     } catch (err: unknown) {
-      const apiError = err as {
-        response?: { data?: { error?: string } };
-        message?: string;
-      };
-      setRemoveError(
-        apiError?.response?.data?.error ||
-          apiError?.message ||
-          "Failed to remove member",
-      );
-    } finally {
-      setRemoveSubmitting(false);
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      alert(apiError?.response?.data?.error || apiError?.message || 'Failed to remove member')
     }
   }
 
-  async function handleJoinRequest(
-    userId: string,
-    action: "approved" | "denied",
-  ) {
+  async function handleJoinRequest(userId: string, action: 'approved' | 'denied') {
     try {
-      await appAPIClient.patch(`/groups/${id}/join-requests/${userId}`, {
-        status: action,
-        role: "member",
-      });
-      setJoinRequests(joinRequests.filter((jr) => jr.user_id !== userId));
-      if (action === "approved") {
-        // Refresh memberships to include the new member
-        appAPIClient
-          .get(`/groups/${id}/memberships`)
-          .then((mRes) => setMemberships(mRes.data));
+      await appAPIClient.patch(`/groups/${id}/join-requests/${userId}`, { status: action, role: 'member' })
+      setJoinRequests(joinRequests.filter(jr => jr.user_id !== userId))
+      if (action === 'approved') {
+        appAPIClient.get(`/groups/${id}/memberships`).then(mRes => setMemberships(mRes.data))
       }
     } catch (err: unknown) {
-      const apiError = err as {
-        response?: { data?: { error?: string } };
-        message?: string;
-      };
-      alert(
-        apiError?.response?.data?.error ||
-          apiError?.message ||
-          `Failed to ${action} request`,
-      );
+      const apiError = err as { response?: { data?: { error?: string } }, message?: string }
+      alert(apiError?.response?.data?.error || apiError?.message || `Failed to ${action} request`)
     }
   }
 
   if (loading) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-        Loading...
+      <main className="mx-auto flex max-w-5xl flex-col items-center justify-center px-5 py-32">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-ink/20 border-t-ink"></div>
+        <p className="mt-4 text-sm font-medium text-ink/40">Opening group space...</p>
       </main>
-    );
+    )
   }
 
   if (!group) {
     return (
-      <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
-        <div className="rounded border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
-          {error || "Group not found"}
+      <main className="mx-auto max-w-3xl px-5 py-24">
+        <div className="rounded-3xl border border-rose-100 bg-rose-50/50 p-12 text-center backdrop-blur-sm">
+          <h2 className="text-xl font-bold text-rose-900">Group not found</h2>
+          <p className="mt-2 text-rose-700/60">{error || 'Could not find the group you are looking for.'}</p>
+          <div className="mt-8">
+            <Button href="/groups" variant="secondary">Back to Groups</Button>
+          </div>
         </div>
-        <Link href="/groups" className="text-blue-600 underline">
-          Back to groups
-        </Link>
       </main>
-    );
+    )
   }
 
   return (
     <main
-      className={`${space.className} relative min-h-screen overflow-x-clip text-[#122038]`}
+      className="relative min-h-screen overflow-x-clip px-5 py-12 sm:px-8"
       style={{
         background:
-          "radial-gradient(circle at 12% 18%, rgba(255, 177, 42, 0.16), transparent 28%), radial-gradient(circle at 88% 82%, rgba(239, 109, 76, 0.14), transparent 30%), linear-gradient(145deg, #f8f7f2, #dfeee8 56%, #f9dabc)",
+          "radial-gradient(circle at 10% 16%, rgba(255, 177, 42, 0.16), transparent 28%), radial-gradient(circle at 90% 84%, rgba(239, 109, 76, 0.14), transparent 30%), linear-gradient(145deg, #f8f7f2, #e7f0ec 56%, #f7d9bb)",
       }}
     >
       <div className="noise" />
-      <div className="relative z-10 mx-auto max-w-6xl px-5 py-6 sm:px-8 lg:py-8">
-        <section className="stitch-panel rounded-4xl border border-[#122038]/10 p-6 shadow-glow sm:p-8 lg:p-10">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-3xl">
-              <p className="inline-flex items-center gap-2 rounded-full border border-[#122038]/10 bg-[#122038]/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]">
-                Group detail
-              </p>
-              <h1
-                className={`${fraunces.className} mt-5 text-4xl leading-[1.02] sm:text-5xl lg:text-6xl`}
-              >
-                {group.name}
-              </h1>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                href="/groups"
-                className="rounded-full border border-[#122038]/14 bg-white/80 px-4 py-2 text-sm font-semibold text-[#122038]/80 transition hover:bg-[#eef1ec] hover:text-[#122038]"
-              >
-                Back to groups
-              </Link>
-              <span className="rounded-full border border-[#122038]/10 bg-white/80 px-4 py-2 text-sm font-semibold text-[#122038]/72">
-                {isMember ? `Role: ${group.role}` : "Not a member"}
-              </span>
-              <span className="rounded-full border border-[#122038]/10 bg-white/80 px-4 py-2 text-sm font-semibold text-[#122038]/72">
-                Members: {memberships.length}
-              </span>
-              {isAdmin ? (
-                <span className="rounded-full border border-[#122038]/10 bg-[#122038] px-4 py-2 text-sm font-semibold text-[#f8f7f2]">
-                  Admin review
+      <div className="relative z-10 mx-auto max-w-5xl">
+        <header className="mb-12 flex flex-wrap items-end justify-between gap-6">
+          <div>
+            <div className="flex items-center gap-3">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-forest/60">Community Space</p>
+              {group.role && (
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                  group.role === 'admin' ? "bg-ink text-white" : "bg-ink/5 text-ink/40"
+                }`}>
+                  {group.role}
                 </span>
-              ) : null}
+              )}
             </div>
+            <h1 className="mt-3 font-display text-5xl font-bold tracking-tight text-ink sm:text-6xl">
+              {group.name}
+            </h1>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <article className="rounded-3xl border border-[#122038]/10 bg-white/80 p-5 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#122038]/50">
-                Access
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                {isMember
-                  ? "Joined"
-                  : group.has_pending_request
-                    ? "Request pending"
-                    : "Join available"}
-              </p>
-            </article>
-            <article className="rounded-3xl border border-[#122038]/10 bg-white/80 p-5 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#122038]/50">
-                Queue
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                {joinRequests.length} pending reviews
-              </p>
-            </article>
-            <article className="rounded-3xl border border-[#122038]/10 bg-white/80 p-5 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#122038]/50">
-                Join code
-              </p>
-              <p className="mt-2 text-lg font-semibold">
-                {isAdmin ? group.join_code || "Not set" : "Hidden"}
-              </p>
-            </article>
-          </div>
+          {group.role === 'admin' && (
+            <Button href={`/groups/${id}/edit`} variant="nav-secondary" size="sm">
+              Edit Group Settings
+            </Button>
+          )}
+        </header>
 
-          <div className="mt-8 flex flex-wrap gap-2 rounded-full border border-[#122038]/10 bg-white/80 p-2 shadow-sm">
+        <nav className="mb-10 flex gap-1 border-b border-ink/5 pb-4">
+          {[
+            { id: 'overview', label: 'Overview' },
+            { id: 'members', label: 'Members', count: memberships.length, hidden: !group.role },
+            { id: 'collections', label: 'Collections', count: collections.length, hidden: !group.role },
+            { id: 'requests', label: 'Requests', count: joinRequests.length, hidden: group.role !== 'admin' },
+          ].filter(t => !t.hidden).map((tab) => (
             <button
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === "overview" ? "bg-[#122038] text-[#f8f7f2]" : "text-[#122038]/70 hover:bg-[#122038]/5 hover:text-[#122038]"}`}
-              onClick={() => setActiveTab("overview")}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as 'overview' | 'collections' | 'members' | 'requests')}
+              className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold transition-all ${
+                activeTab === tab.id 
+                  ? "bg-ink text-white shadow-md" 
+                  : "text-ink/40 hover:bg-ink/10 hover:text-ink/60"
+              }`}
             >
-              Overview
+              {tab.label}
+              {tab.count !== undefined && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                  activeTab === tab.id ? "bg-white/10 text-white/40" : "bg-ink/5 text-ink/20"
+                }`}>
+                  {tab.count}
+                </span>
+              )}
             </button>
-            {isMember ? (
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === "members" ? "bg-[#122038] text-[#f8f7f2]" : "text-[#122038]/70 hover:bg-[#122038]/5 hover:text-[#122038]"}`}
-                onClick={() => setActiveTab("members")}
-              >
-                Members ({memberships.length})
-              </button>
-            ) : null}
-            {isAdmin ? (
-              <button
-                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${activeTab === "requests" ? "bg-[#122038] text-[#f8f7f2]" : "text-[#122038]/70 hover:bg-[#122038]/5 hover:text-[#122038]"}`}
-                onClick={() => setActiveTab("requests")}
-              >
-                Pending Requests{" "}
-                {joinRequests.length > 0 ? `(${joinRequests.length})` : ""}
-              </button>
-            ) : null}
-          </div>
+          ))}
+        </nav>
 
-          {activeTab === "overview" ? (
-            <section className="mt-8">
-              <div className="rounded-[1.75rem] border border-[#122038]/10 bg-white/85 p-6 shadow-sm sm:p-7">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#122038]/50">
-                  Access state
+        <div className="float-in">
+          {activeTab === 'overview' && (
+            <div className="grid gap-8 md:grid-cols-[1fr_0.4fr]">
+              <div className="glass-card rounded-[2.5rem] border border-ink/10 p-8 shadow-glow sm:p-10">
+                <h2 className="font-display text-2xl font-bold text-ink">About this group</h2>
+                <p className="mt-4 leading-relaxed text-ink/60">
+                  Welcome to {group.name}. This space is managed by its administrators and owners to coordinate collections, events, and community goals.
                 </p>
-                {isMember ? (
-                  <div className="mt-4 space-y-4">
-                    <p className="text-base leading-7 text-[#122038]/72">
-                      You are already inside this group as{" "}
-                      <span className="font-semibold text-[#122038]">
-                        {group.role}
-                      </span>
-                      .
-                    </p>
-                    {isAdmin ? (
-                      <div className="rounded-3xl border border-[#122038]/10 bg-[#122038] p-5 text-[#f8f7f2]">
-                        <div className="flex items-center justify-between gap-4">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f8f7f2]/60">
-                              Join code
-                            </p>
-                            <p className="mt-2 text-2xl font-semibold tracking-[0.2em]">
-                              {group.join_code || "None"}
-                            </p>
-                          </div>
-                          <div className="rounded-full border border-[#f8f7f2]/20 bg-[#f8f7f2]/10 px-3 py-1 text-xs font-semibold">
-                            Share manually
-                          </div>
+                
+                {group.role ? (
+                  <div className="mt-10 rounded-[2rem] border border-ink/5 bg-ink/[0.02] p-6">
+                    <p className="text-sm font-bold text-ink">Your Membership</p>
+                    <p className="mt-1 text-sm text-ink/50">You are currently active in this group as a {group.role}.</p>
+                    
+                    {group.role === 'admin' ? (
+                      <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Join Code</p>
+                          <p className="mt-1 font-mono text-xl font-bold tracking-widest text-ink">{group.join_code || '---'}</p>
                         </div>
+                        <Button variant="nav-secondary" size="sm" onClick={() => navigator.clipboard.writeText(group.join_code || '')}>
+                          Copy
+                        </Button>
                       </div>
                     ) : (
-                      <div className="rounded-3xl border border-[#122038]/10 bg-[#eef1ec] p-5">
-                        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#122038]/50">
-                          Member action
-                        </p>
-                        <p className="mt-2 text-sm leading-6 text-[#122038]/68">
-                          Leave this group if you no longer need access.
-                        </p>
-                        <button
-                          type="button"
-                          onClick={leaveGroup}
-                          disabled={submitting}
-                          className="mt-4 rounded-2xl bg-[#ffd7d0] px-4 py-3 text-sm font-semibold text-[#122038] transition hover:bg-[#ffc8bf] disabled:opacity-60"
-                        >
-                          Leave group
+                      <div className="mt-6">
+                        <button onClick={leaveGroup} disabled={submitting} className="text-xs font-bold uppercase tracking-widest text-ember hover:underline disabled:opacity-50">
+                          Leave Group
                         </button>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="mt-4 space-y-4">
-                    <p className="text-base leading-7 text-[#122038]/72">
-                      Public groups add you instantly. Private groups route you
-                      through a join request for owners and admins.
-                    </p>
-                    <div className="rounded-3xl border border-[#122038]/10 bg-[#122038] p-5 text-[#f8f7f2]">
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f8f7f2]/60">
-                        Join flow
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-[#f8f7f2]/72">
-                        Keep the CTA simple, but let the supporting copy explain
-                        what happens next for public and private groups.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={requestJoin}
-                        disabled={submitting || group.has_pending_request}
-                        className="mt-4 rounded-2xl bg-[#f8f7f2] px-5 py-3 text-sm font-semibold text-[#122038] transition hover:bg-[#eef1ec] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {submitting
-                          ? "Requesting…"
-                          : group.has_pending_request
-                            ? "Request Pending"
-                            : "Join or request access"}
-                      </button>
+                  <div className="mt-10 rounded-[2rem] border border-ink/5 bg-gold/5 p-8 text-center">
+                    <h3 className="text-lg font-bold text-ink">Ready to join?</h3>
+                    <p className="mt-2 text-sm text-ink/60">Access to this group is restricted. Request join to see member activity and collections.</p>
+                    <div className="mt-8">
+                      <Button onClick={requestJoin} disabled={submitting || group.has_pending_request} variant="primary" className="min-w-[200px]">
+                        {submitting ? 'Requesting...' : group.has_pending_request ? 'Request Pending' : 'Request Access'}
+                      </Button>
                     </div>
                   </div>
                 )}
 
-                {message ? (
-                  <p className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-                    {message}
-                  </p>
-                ) : null}
-                {error ? (
-                  <p className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
-                    {error}
-                  </p>
-                ) : null}
+                {message && <div className="mt-8 rounded-2xl bg-forest/5 p-4 text-sm font-medium text-forest">{message}</div>}
+                {error && <div className="mt-8 rounded-2xl bg-rose-50 p-4 text-sm font-medium text-rose-800">{error}</div>}
+              </div>
 
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <Link
-                    href="/groups"
-                    className="text-sm font-semibold text-[#122038] underline-offset-4 hover:underline"
-                  >
-                    Back to groups
-                  </Link>
-                  {isAdmin ? (
-                    <Link
-                      href={`/groups/${id}/edit`}
-                      className="text-sm font-semibold text-[#122038] underline-offset-4 hover:underline"
-                    >
-                      Edit group
-                    </Link>
-                  ) : null}
+              <div className="space-y-6">
+                <div className="glass-card rounded-[2rem] border border-ink/10 p-6 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Privacy</p>
+                  <p className="mt-2 text-sm font-bold text-ink">{group.join_code ? 'Public with code' : 'Private (Review required)'}</p>
+                </div>
+                <div className="glass-card rounded-[2rem] border border-ink/10 p-6 shadow-sm">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Members</p>
+                  <p className="mt-2 text-sm font-bold text-ink">{memberships.length} Active</p>
                 </div>
               </div>
-            </section>
-          ) : null}
+            </div>
+          )}
 
-          {activeTab === "requests" && isAdmin ? (
-            <section className="mt-8 rounded-[1.75rem] border border-[#122038]/10 bg-white/85 p-6 shadow-sm sm:p-7">
-              <div className="flex items-center justify-between gap-4">
+          {activeTab === 'collections' && (
+            <div className="glass-card rounded-[2.5rem] border border-ink/10 p-8 shadow-glow sm:p-10">
+              <div className="mb-10 flex flex-wrap items-center justify-between gap-6">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#122038]/50">
-                    Pending join requests
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold">
-                    Review the queue
-                  </h2>
+                  <h2 className="font-display text-2xl font-bold text-ink">Active Collections</h2>
+                  <p className="mt-1 text-sm text-ink/50">Review and participate in community funding targets.</p>
                 </div>
-                <span className="rounded-full border border-[#122038]/10 bg-[#eef1ec] px-3 py-1 text-sm font-semibold text-[#122038]/70">
-                  {joinRequests.length} waiting
-                </span>
+                {group.role === 'admin' && (
+                  <Button href={`/groups/${id}/collections/new`} variant="primary" size="sm">
+                    New Collection
+                  </Button>
+                )}
               </div>
-              {joinRequests.length === 0 ? (
-                <div className="mt-5 rounded-3xl border border-dashed border-[#122038]/14 bg-[#f8f7f2] p-8 text-center text-sm text-[#122038]/60">
-                  No pending requests right now.
+
+              {collections.length === 0 ? (
+                <div className="rounded-[2.5rem] border border-dashed border-ink/10 py-20 text-center">
+                  <p className="text-lg font-bold text-ink/30">No collections active.</p>
                 </div>
               ) : (
-                <div className="mt-5 divide-y divide-[#122038]/10 overflow-hidden rounded-3xl border border-[#122038]/10 bg-[#f8f7f2]">
-                  {joinRequests.map((jr) => (
-                    <div
-                      key={jr.user_id}
-                      className="flex flex-col gap-4 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
+                <div className="grid gap-4 md:grid-cols-2">
+                  {collections.map((c) => (
+                    <a key={c.id} href={`/groups/${id}/collections/${c.id}`} className="group flex items-center justify-between rounded-3xl border border-ink/5 bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-ink/10 hover:shadow-glow">
                       <div>
-                        <div className="font-semibold">
-                          {jr.display_name || jr.email || `User #${jr.user_id}`}
-                        </div>
-                        <div className="mt-1 text-sm text-[#122038]/58">
-                          Requested to join
+                        <p className="font-display text-2xl font-bold text-ink">{formatCurrency(c.amount)}</p>
+                        <p className="mt-1 text-xs text-ink/40 italic">Due {formatDeadline(c.deadline)}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
+                          c.status === 'closed' || (c.paid_by_current_user && c.has_submission_by_current_user)
+                            ? "bg-forest/5 text-forest"
+                            : "bg-gold/5 text-gold"
+                        }`}>
+                          {c.status === 'closed' || (c.paid_by_current_user && c.has_submission_by_current_user)
+                            ? 'Completed'
+                            : c.paid_by_current_user
+                            ? 'Paid'
+                            : c.status}
+                        </span>
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-ink/5 text-ink transition-all group-hover:bg-ink group-hover:text-white">
+                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() =>
-                            handleJoinRequest(jr.user_id, "approved")
-                          }
-                          className="rounded-full bg-[#122038] px-4 py-2 text-sm font-semibold text-[#f8f7f2] transition hover:bg-[#0b1f4b]"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          onClick={() =>
-                            handleJoinRequest(jr.user_id, "denied")
-                          }
-                          className="rounded-full border border-[#122038]/12 bg-white px-4 py-2 text-sm font-semibold text-[#122038] transition hover:bg-[#f8f7f2]"
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               )}
-            </section>
-          ) : null}
+            </div>
+          )}
 
-          {activeTab === "members" && isMember ? (
-            <section className="mt-8 rounded-[1.75rem] border border-[#122038]/10 bg-white/85 p-6 shadow-sm sm:p-7">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#122038]/50">
-                    Members
-                  </p>
-                  <h2 className="mt-2 text-2xl font-semibold">
-                    People in this group
-                  </h2>
-                </div>
-                <span className="rounded-full border border-[#122038]/10 bg-[#eef1ec] px-3 py-1 text-sm font-semibold text-[#122038]/70">
-                  {memberships.length}
-                </span>
-              </div>
-              <div className="mt-5 divide-y divide-[#122038]/10 overflow-hidden rounded-3xl border border-[#122038]/10 bg-[#f8f7f2]">
+          {activeTab === 'members' && (
+            <div className="glass-card rounded-[2.5rem] border border-ink/10 p-8 shadow-glow sm:p-10">
+              <h2 className="font-display text-2xl font-bold text-ink">Community Members</h2>
+              <div className="mt-8 divide-y divide-ink/5">
                 {memberships.length === 0 ? (
-                  <div className="px-5 py-6 text-sm text-[#122038]/60">
-                    No members to display.
-                  </div>
-                ) : (
-                  memberships.map((m) => (
-                    <div
-                      key={m.user_id}
-                      className="flex flex-col gap-4 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div>
-                        <div className="font-semibold">
-                          {m.display_name || m.email || `User #${m.user_id}`}
-                        </div>
-                        <div className="mt-1 text-sm capitalize text-[#122038]/58">
-                          {m.role}
-                        </div>
+                  <p className="py-12 text-center text-sm font-bold text-ink/30 uppercase tracking-widest">No members found</p>
+                ) : memberships.map(m => (
+                  <div key={m.user_id} className="flex items-center justify-between py-4">
+                    <div className="flex items-center gap-4">
+                      <div className="h-10 w-10 rounded-full bg-ink/5 flex items-center justify-center font-bold text-ink/20">
+                        {(m.display_name || m.email || '?')[0].toUpperCase()}
                       </div>
-                      {isAdmin && m.user_id !== group.owner_id ? (
-                        <button
-                          onClick={() => requestMemberRemoval(m)}
-                          className="rounded-full border border-[#122038]/12 bg-white px-4 py-2 text-sm font-semibold text-[#122038] transition hover:bg-[#f8f7f2]"
-                        >
-                          Remove
-                        </button>
-                      ) : null}
+                      <div>
+                        <p className="font-bold text-ink">{m.display_name || m.email || `User #${m.user_id}`}</p>
+                        <p className="text-xs font-bold uppercase tracking-widest text-ink/30">{m.role}</p>
+                      </div>
                     </div>
-                  ))
-                )}
+                    {group.role === 'admin' && m.user_id !== group.owner_id && (
+                      <button onClick={() => ejectMember(m.user_id)} className="text-[10px] font-bold uppercase tracking-widest text-ember/40 hover:text-ember transition-colors">
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            </section>
-          ) : null}
-        </section>
-      </div>
+            </div>
+          )}
 
-      <ConfirmModal
-        open={Boolean(memberToRemove)}
-        eyebrow="Remove member"
-        title={memberToRemove ? `Remove ${memberDisplayName}?` : ""}
-        description="This member will lose access to the group immediately."
-        confirmLabel="Remove member"
-        isSubmitting={removeSubmitting}
-        errorMessage={removeError}
-        onCancel={cancelMemberRemoval}
-        onConfirm={confirmMemberRemoval}
-      />
+          {activeTab === 'requests' && (
+            <div className="glass-card rounded-[2.5rem] border border-ink/10 p-8 shadow-glow sm:p-10">
+              <h2 className="font-display text-2xl font-bold text-ink">Pending Requests</h2>
+              <div className="mt-8 space-y-4">
+                {joinRequests.length === 0 ? (
+                  <div className="rounded-[2rem] border border-dashed border-ink/10 py-12 text-center">
+                    <p className="text-sm font-bold text-ink/30 uppercase tracking-widest">No pending reviews</p>
+                  </div>
+                ) : joinRequests.map(jr => (
+                  <div key={jr.user_id} className="flex items-center justify-between rounded-[2rem] border border-ink/5 bg-white p-5 shadow-sm">
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-full bg-gold/5 flex items-center justify-center font-bold text-gold/40 text-xl">
+                        {(jr.display_name || jr.email || '?')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="font-bold text-ink">{jr.display_name || jr.email || `User #${jr.user_id}`}</p>
+                        <p className="text-xs text-ink/40">Requested to join the community</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" onClick={() => handleJoinRequest(jr.user_id, 'approved')}>Approve</Button>
+                      <Button size="sm" variant="nav-secondary" onClick={() => handleJoinRequest(jr.user_id, 'denied')}>Deny</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </main>
-  );
+  )
 }
