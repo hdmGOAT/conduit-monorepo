@@ -14,6 +14,8 @@ var errStripeNotConfigured = errors.New("stripe payments are not configured")
 
 type stripeGateway interface {
 	CreatePaymentIntent(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error)
+	CreateCheckoutSession(ctx context.Context, priceID, successURL, cancelURL, clientReferenceID string, metadata map[string]string) (*stripeCheckoutSession, error)
+	RetrieveCheckoutSession(ctx context.Context, sessionID string) (*stripeCheckoutSession, error)
 	ParseWebhookEvent(payload []byte, signature string) (stripeWebhookEvent, error)
 }
 
@@ -27,6 +29,15 @@ type stripeWebhookEvent struct {
 	PaymentIntentID string `json:"payment_intent_id"`
 }
 
+type stripeCheckoutSession struct {
+	ID                string            `json:"id"`
+	URL               string            `json:"url"`
+	Status            string            `json:"status"`
+	PaymentStatus     string            `json:"payment_status"`
+	ClientReferenceID string            `json:"client_reference_id"`
+	Metadata          map[string]string `json:"metadata"`
+}
+
 type stripeClient struct {
 	client        *stripe.Client
 	webhookSecret string
@@ -35,10 +46,11 @@ type stripeClient struct {
 
 func NewStripeGateway(secretKey, webhookSecret, currency string) stripeGateway {
 	normalizedSecretKey := strings.TrimSpace(secretKey)
-	normalizedWebhookSecret := strings.TrimSpace(webhookSecret)
-	if normalizedSecretKey == "" || normalizedWebhookSecret == "" {
+	if normalizedSecretKey == "" {
 		return nil
 	}
+
+	normalizedWebhookSecret := strings.TrimSpace(webhookSecret)
 
 	normalizedCurrency := strings.ToLower(strings.TrimSpace(currency))
 	if normalizedCurrency == "" {
@@ -50,6 +62,60 @@ func NewStripeGateway(secretKey, webhookSecret, currency string) stripeGateway {
 		webhookSecret: normalizedWebhookSecret,
 		currency:      normalizedCurrency,
 	}
+}
+
+func (s *stripeClient) CreateCheckoutSession(ctx context.Context, priceID, successURL, cancelURL, clientReferenceID string, metadata map[string]string) (*stripeCheckoutSession, error) {
+	if s == nil || s.client == nil {
+		return nil, errStripeNotConfigured
+	}
+
+	params := &stripe.CheckoutSessionCreateParams{
+		SuccessURL:        stripe.String(successURL),
+		CancelURL:         stripe.String(cancelURL),
+		ClientReferenceID: stripe.String(clientReferenceID),
+		Mode:              stripe.String(stripe.CheckoutSessionModeSubscription),
+		LineItems: []*stripe.CheckoutSessionCreateLineItemParams{
+			{
+				Price:    stripe.String(priceID),
+				Quantity: stripe.Int64(1),
+			},
+		},
+		Metadata: metadata,
+	}
+
+	session, err := s.client.V1CheckoutSessions.Create(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	return &stripeCheckoutSession{
+		ID:                session.ID,
+		URL:               session.URL,
+		Status:            string(session.Status),
+		PaymentStatus:     string(session.PaymentStatus),
+		ClientReferenceID: session.ClientReferenceID,
+		Metadata:          session.Metadata,
+	}, nil
+}
+
+func (s *stripeClient) RetrieveCheckoutSession(ctx context.Context, sessionID string) (*stripeCheckoutSession, error) {
+	if s == nil || s.client == nil {
+		return nil, errStripeNotConfigured
+	}
+
+	session, err := s.client.V1CheckoutSessions.Retrieve(ctx, sessionID, &stripe.CheckoutSessionRetrieveParams{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &stripeCheckoutSession{
+		ID:                session.ID,
+		URL:               session.URL,
+		Status:            string(session.Status),
+		PaymentStatus:     string(session.PaymentStatus),
+		ClientReferenceID: session.ClientReferenceID,
+		Metadata:          session.Metadata,
+	}, nil
 }
 
 func (s *stripeClient) CreatePaymentIntent(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error) {

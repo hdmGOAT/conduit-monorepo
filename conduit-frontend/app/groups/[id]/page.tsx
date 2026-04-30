@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 import { Button } from '@/components/button'
+import UpgradePromptModal from '@/components/UpgradePromptModal'
+import { PolicyGuidance, getPolicyGuidanceFromError } from '@/lib/api/subscriptionPolicy'
 
 interface Group {
   id: string
@@ -40,6 +42,20 @@ interface Collection {
   has_submission_by_current_user?: boolean
 }
 
+interface GroupSubscriptionSummary {
+  tier: string
+  member_limit: number
+  member_usage: number
+  member_remaining: number
+  transaction_capacity_per_period: number
+  transaction_usage: number
+  transaction_remaining: number
+  transaction_fee_bps: number
+  period_start?: string
+  period_end?: string
+  is_free_tier: boolean
+}
+
 function formatCurrency(amountInCents: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -56,6 +72,16 @@ function formatDeadline(value: string) {
   }).format(date)
 }
 
+function formatTierLabel(tier: string) {
+  if (!tier) return 'Unknown'
+  return `${tier.slice(0, 1).toUpperCase()}${tier.slice(1)}`
+}
+
+function formatUsagePercent(used: number, limit: number) {
+  if (limit <= 0) return 0
+  return Math.min(100, Math.max(0, Math.round((used / limit) * 100)))
+}
+
 export default function Page() {
   const params = useParams() as { id: string }
   const id = params.id
@@ -63,11 +89,27 @@ export default function Page() {
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
+  const [subscriptionSummary, setSubscriptionSummary] = useState<GroupSubscriptionSummary | null>(null)
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'overview' | 'collections' | 'members' | 'requests'>('overview')
+  const [policyGuidance, setPolicyGuidance] = useState<PolicyGuidance | null>(null)
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+
+  async function loadSubscriptionSummary(groupId: string) {
+    setSubscriptionLoading(true)
+    try {
+      const res = await appAPIClient.get(`/groups/${groupId}/subscription`)
+      setSubscriptionSummary(res.data)
+    } catch {
+      setSubscriptionSummary(null)
+    } finally {
+      setSubscriptionLoading(false)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -101,6 +143,7 @@ export default function Page() {
           appAPIClient.get(`/groups/${id}/join-requests`).then(jrRes => {
             if (mounted) setJoinRequests(jrRes.data.filter((jr: JoinRequest) => jr.status === 'pending'))
           }).catch(console.error)
+          loadSubscriptionSummary(id).catch(console.error)
         }
       }
     }).catch(err => {
@@ -159,6 +202,9 @@ export default function Page() {
     try {
       await appAPIClient.delete(`/groups/${id}/memberships/${userId}`)
       setMemberships(memberships.filter(m => m.user_id !== userId))
+      if (group?.role === 'admin') {
+        await loadSubscriptionSummary(id)
+      }
     } catch (err: unknown) {
       const apiError = err as { response?: { data?: { error?: string } }, message?: string }
       alert(apiError?.response?.data?.error || apiError?.message || 'Failed to remove member')
@@ -167,12 +213,22 @@ export default function Page() {
 
   async function handleJoinRequest(userId: string, action: 'approved' | 'denied') {
     try {
+      setPolicyGuidance(null)
       await appAPIClient.patch(`/groups/${id}/join-requests/${userId}`, { status: action, role: 'member' })
       setJoinRequests(joinRequests.filter(jr => jr.user_id !== userId))
       if (action === 'approved') {
         appAPIClient.get(`/groups/${id}/memberships`).then(mRes => setMemberships(mRes.data))
       }
+      if (group?.role === 'admin') {
+        await loadSubscriptionSummary(id)
+      }
     } catch (err: unknown) {
+      const guidance = getPolicyGuidanceFromError(err)
+      if (guidance) {
+        setPolicyGuidance(guidance)
+        setShowUpgradePrompt(true)
+        return
+      }
       const apiError = err as { response?: { data?: { error?: string } }, message?: string }
       alert(apiError?.response?.data?.error || apiError?.message || `Failed to ${action} request`)
     }
@@ -264,6 +320,18 @@ export default function Page() {
         </nav>
 
         <div className="float-in">
+          {policyGuidance && (
+            <div className="mb-6 rounded-2xl border border-gold/25 bg-gold/10 p-4">
+              <p className="text-sm font-bold text-ink">{policyGuidance.title}</p>
+              <p className="mt-1 text-sm text-ink/70">{policyGuidance.message}</p>
+              <p className="mt-1 text-xs text-ink/60">{policyGuidance.detail}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setShowUpgradePrompt(true)}>{policyGuidance.ctaLabel}</Button>
+                <Button size="sm" variant="nav-secondary" onClick={() => setPolicyGuidance(null)}>Dismiss</Button>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'overview' && (
             <div className="grid gap-8 md:grid-cols-[1fr_0.4fr]">
               <div className="glass-card rounded-[2.5rem] border border-ink/10 p-8 shadow-glow sm:p-10">
@@ -278,13 +346,18 @@ export default function Page() {
                     <p className="mt-1 text-sm text-ink/50">You are currently active in this group as a {group.role}.</p>
                     
                     {group.role === 'admin' ? (
-                      <div className="mt-6 flex items-center justify-between gap-4 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Join Code</p>
-                          <p className="mt-1 font-mono text-xl font-bold tracking-widest text-ink">{group.join_code || '---'}</p>
+                      <div className="mt-6 space-y-3">
+                        <div className="flex items-center justify-between gap-4 rounded-2xl border border-ink/10 bg-white p-4 shadow-sm">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Join Code</p>
+                            <p className="mt-1 font-mono text-xl font-bold tracking-widest text-ink">{group.join_code || '---'}</p>
+                          </div>
+                          <Button variant="nav-secondary" size="sm" onClick={() => navigator.clipboard.writeText(group.join_code || '')}>
+                            Copy
+                          </Button>
                         </div>
-                        <Button variant="nav-secondary" size="sm" onClick={() => navigator.clipboard.writeText(group.join_code || '')}>
-                          Copy
+                        <Button href={`/groups/${id}/billing`} variant="nav-secondary" size="sm">
+                          Billing & Upgrade
                         </Button>
                       </div>
                     ) : (
@@ -320,6 +393,56 @@ export default function Page() {
                   <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Members</p>
                   <p className="mt-2 text-sm font-bold text-ink">{memberships.length} Active</p>
                 </div>
+                {group.role === 'admin' && (
+                  <div className="glass-card rounded-[2rem] border border-ink/10 p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-ink/30">Subscription</p>
+                        <p className="mt-1 text-sm font-bold text-ink">
+                          {subscriptionLoading && !subscriptionSummary ? 'Loading...' : subscriptionSummary ? formatTierLabel(subscriptionSummary.tier) : 'Unavailable'}
+                        </p>
+                        {subscriptionSummary?.period_end && (
+                          <p className="mt-1 text-[11px] text-ink/45">Period ends {formatDeadline(subscriptionSummary.period_end)}</p>
+                        )}
+                      </div>
+                      {subscriptionSummary?.is_free_tier && (
+                        <span className="rounded-full bg-gold/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gold">Free Tier</span>
+                      )}
+                    </div>
+
+                    {subscriptionSummary && (
+                      <div className="mt-4 space-y-4">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-ink/60">
+                            <span>Members</span>
+                            <span>{subscriptionSummary.member_usage}/{subscriptionSummary.member_limit} used</span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                            <div
+                              className="h-full rounded-full bg-forest"
+                              style={{ width: `${formatUsagePercent(subscriptionSummary.member_usage, subscriptionSummary.member_limit)}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[11px] text-ink/45">{subscriptionSummary.member_remaining} remaining</p>
+                        </div>
+
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-ink/60">
+                            <span>Transactions</span>
+                            <span>{subscriptionSummary.transaction_usage}/{subscriptionSummary.transaction_capacity_per_period} used</span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-ink/10">
+                            <div
+                              className="h-full rounded-full bg-ember"
+                              style={{ width: `${formatUsagePercent(subscriptionSummary.transaction_usage, subscriptionSummary.transaction_capacity_per_period)}%` }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[11px] text-ink/45">{subscriptionSummary.transaction_remaining} remaining</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -431,6 +554,17 @@ export default function Page() {
           )}
         </div>
       </div>
+
+      <UpgradePromptModal
+        open={showUpgradePrompt && Boolean(policyGuidance)}
+        title={policyGuidance?.title || 'Subscription limit reached'}
+        message={policyGuidance?.message || 'This action is blocked by your current plan limits.'}
+        detail={policyGuidance?.detail || 'Open billing to upgrade this group and continue.'}
+        groupId={id}
+        returnTo={`/groups/${id}`}
+        ctaLabel={policyGuidance?.ctaLabel || 'Upgrade group'}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </main>
   )
 }

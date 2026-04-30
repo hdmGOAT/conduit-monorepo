@@ -10,7 +10,7 @@ import (
 const (
 	defaultDBURL          = "postgres://conduit:conduit@localhost:5432/conduit?sslmode=disable"
 	defaultJWT            = "dev-change-me"
-	defaultStripeCurrency = "usd"
+	defaultStripeCurrency = "php"
 )
 
 type Config struct {
@@ -27,6 +27,9 @@ type Config struct {
 	StripeSecretKey                                 string
 	StripeWebhookSecret                             string
 	StripeCurrency                                  string
+	StripePriceStarterMonthly                       string
+	StripePriceGrowthMonthly                        string
+	StripePriceEnterpriseMonthly                    string
 	SubscriptionDefaultTier                         string
 	SubscriptionDefaultMemberLimit                  int32
 	SubscriptionDefaultTransactionCapacityPerPeriod int32
@@ -48,6 +51,9 @@ func Load() Config {
 		StripeSecretKey:                envOrDefault("STRIPE_SECRET_KEY", ""),
 		StripeWebhookSecret:            envOrDefault("STRIPE_WEBHOOK_SECRET", ""),
 		StripeCurrency:                 envOrDefault("STRIPE_CURRENCY", defaultStripeCurrency),
+		StripePriceStarterMonthly:      envOrDefault("STRIPE_PRICE_STARTER_MONTHLY", ""),
+		StripePriceGrowthMonthly:       envOrDefault("STRIPE_PRICE_GROWTH_MONTHLY", ""),
+		StripePriceEnterpriseMonthly:   envOrDefault("STRIPE_PRICE_ENTERPRISE_MONTHLY", ""),
 		SubscriptionDefaultTier:        envOrDefault("SUBSCRIPTION_DEFAULT_TIER", "free"),
 		SubscriptionDefaultMemberLimit: int32(envIntOrDefault("SUBSCRIPTION_DEFAULT_MEMBER_LIMIT", 25)),
 		SubscriptionDefaultTransactionCapacityPerPeriod: int32(envIntOrDefault("SUBSCRIPTION_DEFAULT_TRANSACTION_CAPACITY_PER_PERIOD", 250)),

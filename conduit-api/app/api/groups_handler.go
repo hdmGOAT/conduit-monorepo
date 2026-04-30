@@ -3,21 +3,28 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"conduit-monorepo/conduit-api/app/api/middleware"
 	"conduit-monorepo/conduit-api/internal/db"
 
+	"math/rand"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
-	"math/rand"
 )
 
 type GroupsHandler struct {
 	db                   db.Querier
 	subscriptionDefaults GroupSubscriptionDefaults
+	stripe               stripeGateway
+	frontendURL          string
+	billingPlans         billingPlanCatalog
 }
 
 type GroupSubscriptionDefaults struct {
@@ -40,7 +47,18 @@ func NewGroupsHandler(dbq db.Querier, defaults ...GroupSubscriptionDefaults) *Gr
 		resolvedDefaults = defaults[0]
 	}
 
-	return &GroupsHandler{db: dbq, subscriptionDefaults: resolvedDefaults}
+	return &GroupsHandler{db: dbq, subscriptionDefaults: resolvedDefaults, billingPlans: DefaultBillingPlanCatalog()}
+}
+
+func (h *GroupsHandler) ConfigureBilling(stripe stripeGateway, frontendURL string, plans billingPlanCatalog) {
+	h.stripe = stripe
+	h.frontendURL = strings.TrimSpace(frontendURL)
+	if h.frontendURL == "" {
+		h.frontendURL = "http://localhost:3000"
+	}
+	if len(plans) > 0 {
+		h.billingPlans = plans
+	}
 }
 
 type createGroupRequest struct {
@@ -198,6 +216,282 @@ func (h *GroupsHandler) GetGroup(c *gin.Context) {
 		"role":                role,
 		"join_code":           grp.JoinCode,
 		"has_pending_request": hasPendingRequest,
+	})
+}
+
+func (h *GroupsHandler) GetSubscriptionSummary(c *gin.Context) {
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	callerID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	groupIDStr := c.Param("group_id")
+	groupID, err := strconv.ParseInt(groupIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch group access"})
+		return
+	}
+	if role == "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be a group member to view subscription usage"})
+		return
+	}
+
+	subscription, err := h.db.GetOrganizationSubscriptionByGroup(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load subscription"})
+		return
+	}
+
+	memberUsage, err := h.db.CountMembersByGroup(c.Request.Context(), groupID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load member usage"})
+		return
+	}
+
+	periodStart, periodEnd := billingPeriodBounds(time.Now().UTC())
+	usagePeriodStart := periodStart
+	usagePeriodEnd := periodEnd
+	transactionUsage := int64(0)
+
+	usage, err := h.db.GetUsagePeriodByGroupAndStart(c.Request.Context(), db.GetUsagePeriodByGroupAndStartParams{
+		GroupID:     groupID,
+		PeriodStart: periodStart,
+	})
+	if err == nil {
+		transactionUsage = int64(usage.TransactionCount)
+		usagePeriodStart = usage.PeriodStart
+		usagePeriodEnd = usage.PeriodEnd
+	} else if !isNoRowsErr(err) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load transaction usage"})
+		return
+	}
+
+	memberLimit := int64(subscription.MemberLimit)
+	memberRemaining := memberLimit - memberUsage
+	if memberRemaining < 0 {
+		memberRemaining = 0
+	}
+
+	transactionLimit := int64(subscription.TransactionCapacityPerPeriod)
+	transactionRemaining := transactionLimit - transactionUsage
+	if transactionRemaining < 0 {
+		transactionRemaining = 0
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tier":                            subscription.Tier,
+		"tier_name":                       h.billingPlans[subscription.Tier].Name,
+		"member_limit":                    memberLimit,
+		"member_usage":                    memberUsage,
+		"member_remaining":                memberRemaining,
+		"transaction_capacity_per_period": transactionLimit,
+		"transaction_usage":               transactionUsage,
+		"transaction_remaining":           transactionRemaining,
+		"transaction_fee_bps":             subscription.TransactionFeeBps,
+		"period_start":                    timeToInterface(usagePeriodStart),
+		"period_end":                      timeToInterface(usagePeriodEnd),
+		"is_free_tier":                    subscription.Tier == db.SubscriptionTierFree,
+	})
+}
+
+type createCheckoutSessionRequest struct {
+	Tier     string `json:"tier" binding:"required"`
+	ReturnTo string `json:"return_to"`
+}
+
+func (h *GroupsHandler) CreateSubscriptionCheckoutSession(c *gin.Context) {
+	if h.stripe == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe billing is not configured"})
+		return
+	}
+
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	callerID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify group access"})
+		return
+	}
+	if role != db.MembershipRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to upgrade subscription"})
+		return
+	}
+
+	var req createCheckoutSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	tier := db.SubscriptionTier(strings.TrimSpace(req.Tier))
+	plan, ok := h.billingPlans[tier]
+	if !ok || tier == db.SubscriptionTierFree {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upgrade tier"})
+		return
+	}
+	if strings.TrimSpace(plan.StripePriceID) == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": fmt.Sprintf("stripe price is not configured for %s", tier)})
+		return
+	}
+
+	returnTo := strings.TrimSpace(req.ReturnTo)
+	if returnTo == "" || !strings.HasPrefix(returnTo, "/") {
+		returnTo = fmt.Sprintf("/groups/%d", groupID)
+	}
+
+	successURL := fmt.Sprintf("%s/groups/%d/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}&tier=%s&returnTo=%s", h.frontendURL, groupID, tier, returnTo)
+	cancelURL := fmt.Sprintf("%s/groups/%d/billing?checkout=cancel&tier=%s&returnTo=%s", h.frontendURL, groupID, tier, returnTo)
+
+	checkoutSession, err := h.stripe.CreateCheckoutSession(c.Request.Context(), plan.StripePriceID, successURL, cancelURL, strconv.FormatInt(groupID, 10), map[string]string{
+		"group_id": strconv.FormatInt(groupID, 10),
+		"tier":     string(tier),
+	})
+	if err != nil {
+		if errors.Is(err, errStripeNotConfigured) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe billing is not configured"})
+			return
+		}
+		log.Printf("failed to create checkout session for group %d: %v", groupID, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to create checkout session"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"checkout_session_id": checkoutSession.ID,
+		"checkout_url":        checkoutSession.URL,
+		"tier":                tier,
+	})
+}
+
+type confirmCheckoutSessionRequest struct {
+	SessionID string `json:"session_id" binding:"required"`
+}
+
+func (h *GroupsHandler) ConfirmSubscriptionCheckoutSession(c *gin.Context) {
+	if h.stripe == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe billing is not configured"})
+		return
+	}
+
+	userIDValue, exists := c.Get(middleware.UserIDContextKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	callerID, ok := userIDValue.(int64)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user context"})
+		return
+	}
+
+	groupID, err := strconv.ParseInt(c.Param("group_id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid group id"})
+		return
+	}
+
+	_, role, err := resolveGroupAccess(c.Request.Context(), h.db, callerID, groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "group not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify group access"})
+		return
+	}
+	if role != db.MembershipRoleAdmin {
+		c.JSON(http.StatusForbidden, gin.H{"error": "must be owner or admin to confirm upgrade"})
+		return
+	}
+
+	var req confirmCheckoutSessionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err)
+		return
+	}
+
+	session, err := h.stripe.RetrieveCheckoutSession(c.Request.Context(), strings.TrimSpace(req.SessionID))
+	if err != nil {
+		if errors.Is(err, errStripeNotConfigured) {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "stripe billing is not configured"})
+			return
+		}
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to verify checkout session"})
+		return
+	}
+
+	if session.Status != "complete" || session.PaymentStatus != "paid" {
+		c.JSON(http.StatusConflict, gin.H{"error": "checkout session is not completed"})
+		return
+	}
+
+	metadataGroupID := strings.TrimSpace(session.Metadata["group_id"])
+	if metadataGroupID != strconv.FormatInt(groupID, 10) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "checkout session does not belong to this group"})
+		return
+	}
+
+	tier := db.SubscriptionTier(strings.TrimSpace(session.Metadata["tier"]))
+	plan, ok := h.billingPlans[tier]
+	if !ok || tier == db.SubscriptionTierFree {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "checkout session has an invalid tier"})
+		return
+	}
+
+	updated, err := h.db.UpsertOrganizationSubscription(c.Request.Context(), db.UpsertOrganizationSubscriptionParams{
+		GroupID:                      groupID,
+		Tier:                         tier,
+		MemberLimit:                  plan.MemberLimit,
+		TransactionCapacityPerPeriod: plan.TransactionCapacityPerPeriod,
+		TransactionFeeBps:            plan.TransactionFeeBps,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply subscription upgrade"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"group_id":                        updated.GroupID,
+		"tier":                            updated.Tier,
+		"member_limit":                    updated.MemberLimit,
+		"transaction_capacity_per_period": updated.TransactionCapacityPerPeriod,
+		"transaction_fee_bps":             updated.TransactionFeeBps,
+		"message":                         "subscription upgraded",
 	})
 }
 

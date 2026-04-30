@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 import { StripePaymentForm } from '@/components/collections/stripe-payment-form'
 import { Button } from '@/components/button'
+import UpgradePromptModal from '@/components/UpgradePromptModal'
+import { PolicyGuidance, getPolicyGuidanceFromError } from '@/lib/api/subscriptionPolicy'
 
 type Group = {
   id: string
@@ -92,6 +94,20 @@ type Me = {
   display_name: string
 }
 
+type GroupSubscriptionSummary = {
+  tier: string
+  member_limit: number
+  member_usage: number
+  member_remaining: number
+  transaction_capacity_per_period: number
+  transaction_usage: number
+  transaction_remaining: number
+  transaction_fee_bps: number
+  period_start?: string
+  period_end?: string
+  is_free_tier: boolean
+}
+
 function formatCurrency(amountInCents: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -145,6 +161,11 @@ function parseFieldOptions(options: unknown): string[] {
   return []
 }
 
+function formatTierLabel(tier: string) {
+  if (!tier) return 'Unknown'
+  return `${tier.slice(0, 1).toUpperCase()}${tier.slice(1)}`
+}
+
 export default function Page() {
   const params = useParams() as { id: string; collectionId: string }
   const { id, collectionId } = params
@@ -164,6 +185,18 @@ export default function Page() {
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [subscriptionSummary, setSubscriptionSummary] = useState<GroupSubscriptionSummary | null>(null)
+  const [policyGuidance, setPolicyGuidance] = useState<PolicyGuidance | null>(null)
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+
+  async function loadSubscriptionSummary(groupId: string) {
+    try {
+      const res = await appAPIClient.get(`/groups/${groupId}/subscription`)
+      setSubscriptionSummary(res.data)
+    } catch {
+      setSubscriptionSummary(null)
+    }
+  }
 
   useEffect(() => {
     // If the current user already has a submission, prefill the form answers
@@ -216,6 +249,10 @@ export default function Page() {
         setGroup(groupRes.data)
         setCollection(nextCollection ?? null)
         setMe(authRes.data)
+
+        if (groupRes.data?.role) {
+          loadSubscriptionSummary(id).catch(() => setSubscriptionSummary(null))
+        }
 
         if (nextCollection) {
           const [formRes, paymentsRes, membersRes, submissionsRes, mySubmissionRes] = await Promise.all([
@@ -323,6 +360,7 @@ export default function Page() {
     setPaying(true)
     setMessage(null)
     setError(null)
+    setPolicyGuidance(null)
 
     try {
       const response = await appAPIClient.post(`/collections/${collection.id}/payments`, { method })
@@ -343,7 +381,15 @@ export default function Page() {
       }
 
       await refreshPayments(collection.id)
+      await loadSubscriptionSummary(id)
     } catch (paymentError: unknown) {
+      const guidance = getPolicyGuidanceFromError(paymentError)
+      if (guidance) {
+        setPolicyGuidance(guidance)
+        setError(guidance.message)
+        setShowUpgradePrompt(true)
+        return
+      }
       const apiError = paymentError as { response?: { data?: { error?: string } }, message?: string }
       setError(apiError?.response?.data?.error || apiError?.message || 'Failed to create payment')
     } finally {
@@ -370,6 +416,7 @@ export default function Page() {
     setStripeClientSecret(null)
     setMessage(nextMessage)
     await refreshPayments(collection.id)
+    await loadSubscriptionSummary(id)
   }
 
   const router = useRouter()
@@ -539,7 +586,15 @@ export default function Page() {
             <svg className="h-5 w-5 flex-shrink-0 text-rose-500" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
-            <p className="text-sm font-medium">{error}</p>
+            <div>
+              <p className="text-sm font-medium">{error}</p>
+              {policyGuidance && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => setShowUpgradePrompt(true)}>{policyGuidance.ctaLabel}</Button>
+                  <Button size="sm" variant="nav-secondary" onClick={() => setPolicyGuidance(null)}>Dismiss</Button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -557,6 +612,18 @@ export default function Page() {
                     Unlock form
                   </p>
                 </div>
+
+                {subscriptionSummary?.is_free_tier && (
+                  <div className="mb-4 rounded-2xl border border-gold/20 bg-gold/5 p-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-gold">Free Tier Fee</p>
+                    <p className="mt-1 text-xs text-ink/70">
+                      This group is on the {formatTierLabel(subscriptionSummary.tier)} tier. Payments include a {subscriptionSummary.transaction_fee_bps / 100}% transaction fee.
+                    </p>
+                    <p className="mt-1 text-[11px] text-ink/50">
+                      Current period usage: {subscriptionSummary.transaction_usage}/{subscriptionSummary.transaction_capacity_per_period} transactions ({subscriptionSummary.transaction_remaining} remaining).
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex flex-col gap-2 mb-6">
                   <Button onClick={() => startPayment('stripe')} disabled={paying} variant="primary" size="sm" className="w-full">
@@ -803,6 +870,17 @@ export default function Page() {
           </div>
         </section>
       )}
+
+      <UpgradePromptModal
+        open={showUpgradePrompt && Boolean(policyGuidance)}
+        title={policyGuidance?.title || 'Subscription limit reached'}
+        message={policyGuidance?.message || 'This action is blocked by your current plan limits.'}
+        detail={policyGuidance?.detail || 'Open billing to upgrade this group and continue.'}
+        groupId={id}
+        returnTo={`/groups/${id}/collections/${collectionId}`}
+        ctaLabel={policyGuidance?.ctaLabel || 'Upgrade group'}
+        onClose={() => setShowUpgradePrompt(false)}
+      />
     </main>
   )
 }

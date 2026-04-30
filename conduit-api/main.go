@@ -43,11 +43,16 @@ func main() {
 		TransactionFeeBps:            cfg.SubscriptionDefaultTransactionFeeBps,
 	})
 	collectionsHandler := api.NewCollectionsHandler(queries)
+	stripeGateway := api.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeCurrency)
 	paymentsHandler := api.NewPaymentsHandler(transactionalQueries)
-	if cfg.StripeSecretKey != "" && cfg.StripeWebhookSecret != "" {
-		stripeGateway := api.NewStripeGateway(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripeCurrency)
+	if stripeGateway != nil && cfg.StripeWebhookSecret != "" {
 		paymentsHandler = api.NewPaymentsHandler(transactionalQueries, stripeGateway)
 	}
+	groupsHandler.ConfigureBilling(stripeGateway, cfg.FrontendURL, api.DefaultBillingPlanCatalog().WithStripePrices(
+		cfg.StripePriceStarterMonthly,
+		cfg.StripePriceGrowthMonthly,
+		cfg.StripePriceEnterpriseMonthly,
+	))
 	formsHandler := api.NewFormsHandler(queries)
 	router := api.NewRouter(authHandler, groupsHandler, collectionsHandler, paymentsHandler, formsHandler, authService)
 
