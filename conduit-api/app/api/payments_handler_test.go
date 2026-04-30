@@ -23,7 +23,7 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 	cashCalled := false
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -33,7 +33,7 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 		},
 		createPaymentFn: func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error) {
 			called = true
-			if arg.UserID != 42 || arg.CollectionID != 10 || arg.BaseAmount != 2500 || arg.FeeAmount != 13 || arg.TotalAmount != 2513 || arg.Column6 != db.PaymentMethodCash {
+			if arg.UserID != 42 || arg.CollectionID != 10 || arg.BaseAmount != 15000 || arg.FeeAmount != 75 || arg.TotalAmount != 15075 || arg.Column6 != db.PaymentMethodCash {
 				t.Fatalf("unexpected create args: %#v", arg)
 			}
 			return db.Payment{ID: 88, UserID: arg.UserID, CollectionID: arg.CollectionID, BaseAmount: arg.BaseAmount, FeeAmount: arg.FeeAmount, TotalAmount: arg.TotalAmount, Status: db.PaymentStatusPending, Method: arg.Column6, StripePaymentIntentID: arg.StripePaymentIntentID, CreatedAt: pgtype.Timestamptz{}}, nil
@@ -78,14 +78,14 @@ func TestCreatePayment_MemberCanCreatePendingPaymentForActiveCollection(t *testi
 	if method, ok := out["method"].(string); !ok || method != string(db.PaymentMethodCash) {
 		t.Fatalf("expected cash method, got %v", out["method"])
 	}
-	if baseAmount, ok := out["base_amount"].(float64); !ok || int64(baseAmount) != 2500 {
-		t.Fatalf("expected base_amount 2500, got %v", out["base_amount"])
+	if baseAmount, ok := out["base_amount"].(float64); !ok || int64(baseAmount) != 15000 {
+		t.Fatalf("expected base_amount 15000, got %v", out["base_amount"])
 	}
-	if feeAmount, ok := out["fee_amount"].(float64); !ok || int64(feeAmount) != 13 {
-		t.Fatalf("expected fee_amount 13, got %v", out["fee_amount"])
+	if feeAmount, ok := out["fee_amount"].(float64); !ok || int64(feeAmount) != 75 {
+		t.Fatalf("expected fee_amount 75, got %v", out["fee_amount"])
 	}
-	if totalAmount, ok := out["total_amount"].(float64); !ok || int64(totalAmount) != 2513 {
-		t.Fatalf("expected total_amount 2513, got %v", out["total_amount"])
+	if totalAmount, ok := out["total_amount"].(float64); !ok || int64(totalAmount) != 15075 {
+		t.Fatalf("expected total_amount 15075, got %v", out["total_amount"])
 	}
 }
 
@@ -196,10 +196,10 @@ func TestCreatePayment_StripeCreatesPaymentIntent(t *testing.T) {
 	fakeStripe := &fakeStripeGateway{
 		createPaymentIntentFn: func(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error) {
 			called = true
-			if amount != 2513 {
-				t.Fatalf("expected amount 2513, got %d", amount)
+			if amount != 15075 {
+				t.Fatalf("expected amount 15075, got %d", amount)
 			}
-			if metadata["collection_id"] != "10" || metadata["user_id"] != "42" || metadata["amount"] != "2513" || metadata["base_amount"] != "2500" || metadata["fee_amount"] != "13" || metadata["total_amount"] != "2513" {
+			if metadata["collection_id"] != "10" || metadata["user_id"] != "42" || metadata["amount"] != "15075" || metadata["base_amount"] != "15000" || metadata["fee_amount"] != "75" || metadata["total_amount"] != "15075" {
 				t.Fatalf("unexpected metadata: %#v", metadata)
 			}
 			return &stripePaymentIntent{ID: "pi_test_123", ClientSecret: "secret_test_123"}, nil
@@ -207,7 +207,7 @@ func TestCreatePayment_StripeCreatesPaymentIntent(t *testing.T) {
 	}
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -245,8 +245,8 @@ func TestCreatePayment_StripeCreatesPaymentIntent(t *testing.T) {
 	if paymentIntent, ok := out["stripe_payment_intent"].(map[string]any); !ok || paymentIntent["id"] != "pi_test_123" || paymentIntent["client_secret"] != "secret_test_123" {
 		t.Fatalf("expected stripe payment intent payload, got %v", out["stripe_payment_intent"])
 	}
-	if totalAmount, ok := out["total_amount"].(float64); !ok || int64(totalAmount) != 2513 {
-		t.Fatalf("expected total_amount 2513, got %v", out["total_amount"])
+	if totalAmount, ok := out["total_amount"].(float64); !ok || int64(totalAmount) != 15075 {
+		t.Fatalf("expected total_amount 15075, got %v", totalAmount)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestStripePaymentFlow_CreateThenWebhookTransitions(t *testing.T) {
 
 			fake := &fakeDB{
 				getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-					return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+					return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 				},
 				getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 					return db.Group{ID: id, OwnerID: 99}, nil
@@ -350,7 +350,7 @@ func TestStripePaymentFlow_CreateThenWebhookTransitions(t *testing.T) {
 					return []db.Membership{{UserID: 42, GroupID: groupID, Role: db.MembershipRoleMember}}, nil
 				},
 				createPaymentFn: func(ctx context.Context, arg db.CreatePaymentParams) (db.Payment, error) {
-					if arg.UserID != 42 || arg.CollectionID != 10 || arg.BaseAmount != 2500 || arg.FeeAmount != 13 || arg.TotalAmount != 2513 || arg.Column6 != db.PaymentMethodStripe {
+					if arg.UserID != 42 || arg.CollectionID != 10 || arg.BaseAmount != 15000 || arg.FeeAmount != 75 || arg.TotalAmount != 15075 || arg.Column6 != db.PaymentMethodStripe {
 						t.Fatalf("unexpected create args: %#v", arg)
 					}
 					if !arg.StripePaymentIntentID.Valid || arg.StripePaymentIntentID.String != paymentIntentID {
@@ -409,10 +409,10 @@ func TestStripePaymentFlow_CreateThenWebhookTransitions(t *testing.T) {
 
 			fakeStripe := &fakeStripeGateway{
 				createPaymentIntentFn: func(ctx context.Context, amount int64, metadata map[string]string) (*stripePaymentIntent, error) {
-					if amount != 2513 {
-						t.Fatalf("expected amount 2513, got %d", amount)
+					if amount != 15075 {
+						t.Fatalf("expected amount 15075, got %d", amount)
 					}
-					if metadata["collection_id"] != "10" || metadata["user_id"] != "42" || metadata["amount"] != "2513" || metadata["base_amount"] != "2500" || metadata["fee_amount"] != "13" || metadata["total_amount"] != "2513" {
+					if metadata["collection_id"] != "10" || metadata["user_id"] != "42" || metadata["amount"] != "15075" || metadata["base_amount"] != "15000" || metadata["fee_amount"] != "75" || metadata["total_amount"] != "15075" {
 						t.Fatalf("unexpected metadata: %#v", metadata)
 					}
 					return &stripePaymentIntent{ID: paymentIntentID, ClientSecret: "secret_test_123"}, nil
@@ -502,7 +502,7 @@ func TestCreatePayment_ClosedCollectionRejected(t *testing.T) {
 	called := false
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusClosed}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusClosed}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -530,7 +530,7 @@ func TestCreatePayment_ClosedCollectionRejected(t *testing.T) {
 func TestCreatePayment_ForbiddenForNonMember(t *testing.T) {
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -556,7 +556,7 @@ func TestConfirmCashPayment_CollectorCanConfirmPendingCashPayment(t *testing.T) 
 			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
 		},
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -619,7 +619,7 @@ func TestConfirmCashPayment_DuplicateConfirmationRejected(t *testing.T) {
 			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
 		},
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -649,7 +649,7 @@ func TestConfirmCashPayment_NonCollectorForbidden(t *testing.T) {
 			return db.Payment{ID: id, CollectionID: 10, Status: db.PaymentStatusPending, Method: db.PaymentMethodCash}, nil
 		},
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -682,7 +682,7 @@ func TestConfirmCashPayment_NonCollectorForbidden(t *testing.T) {
 func TestListPaymentsByCollection_ReturnsMostRecentFirst(t *testing.T) {
 	fake := &fakeDB{
 		getCollectionFn: func(ctx context.Context, id int64) (db.Collection, error) {
-			return db.Collection{ID: id, GroupID: 5, Amount: 2500, Status: db.CollectionStatusActive}, nil
+			return db.Collection{ID: id, GroupID: 5, Amount: 15000, Status: db.CollectionStatusActive}, nil
 		},
 		getGroupByIDFn: func(ctx context.Context, id int64) (db.Group, error) {
 			return db.Group{ID: id, OwnerID: 99}, nil
@@ -692,8 +692,8 @@ func TestListPaymentsByCollection_ReturnsMostRecentFirst(t *testing.T) {
 		},
 		listPaymentsByCollectionFn: func(ctx context.Context, collectionID int64) ([]db.Payment, error) {
 			return []db.Payment{
-				{ID: 9, UserID: 42, CollectionID: collectionID, BaseAmount: 2500, FeeAmount: 125, TotalAmount: 2625, Status: db.PaymentStatusPending, Method: db.PaymentMethodStripe, CreatedAt: pgtype.Timestamptz{}},
-				{ID: 3, UserID: 43, CollectionID: collectionID, BaseAmount: 2500, FeeAmount: 125, TotalAmount: 2625, Status: db.PaymentStatusPaid, Method: db.PaymentMethodCash, CreatedAt: pgtype.Timestamptz{}},
+				{ID: 9, UserID: 42, CollectionID: collectionID, BaseAmount: 15000, FeeAmount: 750, TotalAmount: 15750, Status: db.PaymentStatusPending, Method: db.PaymentMethodStripe, CreatedAt: pgtype.Timestamptz{}},
+				{ID: 3, UserID: 43, CollectionID: collectionID, BaseAmount: 15000, FeeAmount: 750, TotalAmount: 15750, Status: db.PaymentStatusPaid, Method: db.PaymentMethodCash, CreatedAt: pgtype.Timestamptz{}},
 			}, nil
 		},
 	}
@@ -715,8 +715,8 @@ func TestListPaymentsByCollection_ReturnsMostRecentFirst(t *testing.T) {
 	if id, ok := out[0]["id"].(float64); !ok || int64(id) != 9 {
 		t.Fatalf("expected newest payment first, got %v", out[0]["id"])
 	}
-	if totalAmount, ok := out[0]["total_amount"].(float64); !ok || int64(totalAmount) != 2625 {
-		t.Fatalf("expected total_amount 2625 on list response, got %v", out[0]["total_amount"])
+	if totalAmount, ok := out[0]["total_amount"].(float64); !ok || int64(totalAmount) != 15750 {
+		t.Fatalf("expected total_amount 15750 on list response, got %v", out[0]["total_amount"])
 	}
 }
 
