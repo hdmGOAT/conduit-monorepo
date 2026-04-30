@@ -1,6 +1,7 @@
 "use client"
 
 import { FormEvent, useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import appAPIClient from '@/lib/api/httpClient'
 import { StripePaymentForm } from '@/components/collections/stripe-payment-form'
@@ -188,6 +189,7 @@ export default function Page() {
   const [subscriptionSummary, setSubscriptionSummary] = useState<GroupSubscriptionSummary | null>(null)
   const [policyGuidance, setPolicyGuidance] = useState<PolicyGuidance | null>(null)
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false)
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null)
 
   async function loadSubscriptionSummary(groupId: string) {
     try {
@@ -197,6 +199,44 @@ export default function Page() {
       setSubscriptionSummary(null)
     }
   }
+
+  // Fetch QR code for cash payments
+  useEffect(() => {
+    const fetchQrCode = async () => {
+      setQrCodeUrl(null)
+      
+      if (!me || !payments.length) return
+      const userPayment = payments.find((p) => String(p.user_id) === String(me.id))
+      
+      if (!userPayment || userPayment.method !== 'cash' || userPayment.status !== 'pending') {
+        return
+      }
+
+      try {
+        const token = localStorage.getItem('conduit_access_token')
+        const headers: Record<string, string> = {}
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`
+        }
+        
+        const response = await fetch(`/api/payments/${userPayment.id}/qrcode`, {
+          headers,
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch QR code: ${response.status}`)
+        }
+        
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        setQrCodeUrl(url)
+      } catch (err) {
+        console.error('Failed to fetch QR code:', err)
+      }
+    }
+
+    fetchQrCode()
+  }, [me, payments])
 
   useEffect(() => {
     // If the current user already has a submission, prefill the form answers
@@ -642,6 +682,35 @@ export default function Page() {
                       onCompleted={handleStripeCompleted}
                       onCancel={() => setStripeClientSecret(null)}
                     />
+                  </div>
+                )}
+
+                {myPayment && myPayment.method === 'cash' && myPayment.status === 'pending' && (
+                  <div className="rounded-2xl border border-forest/20 bg-forest/5 p-4 mt-4">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-forest mb-3">Share with Collector</h3>
+                    <p className="text-xs text-forest/80 mb-3">
+                      Show this QR code to your collector to verify the payment:
+                    </p>
+                    <div className="bg-white rounded-lg border border-forest/10 p-3 flex justify-center">
+                      {qrCodeUrl ? (
+                        <Image 
+                          src={qrCodeUrl}
+                          alt="Payment QR Code"
+                          width={150}
+                          height={150}
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-forest/50">
+                          <svg className="w-12 h-12 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-forest/60 mt-3">
+                      Payment ID: <span className="font-mono font-bold">{myPayment.id}</span>
+                    </p>
                   </div>
                 )}
 
